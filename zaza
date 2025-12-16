@@ -1,0 +1,156 @@
+-- ===================== Mobile AFC Fitas Hub with Minimize =====================
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local lp = Players.LocalPlayer
+local Character, HRP, Ball
+
+-- Load character
+local function loadChar()
+    Character = lp.Character or lp.CharacterAdded:Wait()
+    HRP = Character:WaitForChild("HumanoidRootPart",5)
+end
+loadChar()
+lp.CharacterAdded:Connect(loadChar)
+
+-- Find the ball
+task.spawn(function()
+    while task.wait(1) do
+        Ball = workspace:FindFirstChild("TPS", true)
+    end
+end)
+
+-- Settings
+local Settings = {
+    Reach = true,
+    ReachStuds = 2.0,
+    ReactStrength = 0.6
+}
+
+-- ===================== GUI =====================
+local gui = Instance.new("ScreenGui")
+gui.Name = "AFC_Alzzy_Dribble"
+gui.ResetOnSpawn = false
+gui.Parent = lp:WaitForChild("PlayerGui")
+
+-- Main frame
+local main = Instance.new("Frame", gui)
+main.Size = UDim2.fromScale(0.95,0.8)
+main.Position = UDim2.fromScale(0.025,0.1)
+main.BackgroundColor3 = Color3.fromRGB(25,25,25)
+main.Active = true
+main.Draggable = true
+
+-- Title
+local title = Instance.new("TextLabel", main)
+title.Size = UDim2.fromScale(1,0.1)
+title.Position = UDim2.fromScale(0,0)
+title.Text = "AFC Fitas Alzzy Hub"
+title.TextScaled = true
+title.BackgroundTransparency = 1
+title.TextColor3 = Color3.new(1,1,1)
+
+-- Minimize button
+local minimizeBtn = Instance.new("TextButton", main)
+minimizeBtn.Size = UDim2.fromScale(0.15,0.1)
+minimizeBtn.Position = UDim2.fromScale(0.85,0)
+minimizeBtn.Text = "—"
+minimizeBtn.TextScaled = true
+minimizeBtn.BackgroundColor3 = Color3.fromRGB(50,50,50)
+minimizeBtn.TextColor3 = Color3.new(1,1,1)
+
+-- Scrollable area
+local scroll = Instance.new("ScrollingFrame", main)
+scroll.Size = UDim2.fromScale(1,0.9)
+scroll.Position = UDim2.fromScale(0,0.1)
+scroll.CanvasSize = UDim2.new(0,0,0,0)
+scroll.ScrollBarThickness = 10
+scroll.BackgroundTransparency = 1
+scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+
+local layout = Instance.new("UIListLayout", scroll)
+layout.SortOrder = Enum.SortOrder.LayoutOrder
+layout.Padding = UDim.new(0,10)
+
+-- ===================== Number Control =====================
+local function createNumberControl(label, key, min, max, step)
+    local holder = Instance.new("Frame")
+    holder.Size = UDim2.new(0.9,0,0,60)
+    holder.BackgroundTransparency = 1
+    holder.Parent = scroll
+
+    local lbl = Instance.new("TextLabel", holder)
+    lbl.Size = UDim2.new(0.4,0,1,0)
+    lbl.Text = label .. ": " .. string.format("%.1f", Settings[key])
+    lbl.TextScaled = true
+    lbl.BackgroundTransparency = 1
+    lbl.TextColor3 = Color3.new(1,1,1)
+
+    local dec = Instance.new("TextButton", holder)
+    dec.Size = UDim2.new(0.3,0,1,0)
+    dec.Position = UDim2.new(0.4,0,0,0)
+    dec.Text = "-"
+    dec.TextScaled = true
+    dec.BackgroundColor3 = Color3.fromRGB(60,60,60)
+    dec.TextColor3 = Color3.new(1,1,1)
+    dec.MouseButton1Click:Connect(function()
+        Settings[key] = math.max(Settings[key]-step,min)
+        lbl.Text = label .. ": " .. string.format("%.1f", Settings[key])
+    end)
+
+    local inc = Instance.new("TextButton", holder)
+    inc.Size = UDim2.new(0.3,0,1,0)
+    inc.Position = UDim2.new(0.7,0,0,0)
+    inc.Text = "+"
+    inc.TextScaled = true
+    inc.BackgroundColor3 = Color3.fromRGB(60,60,60)
+    inc.TextColor3 = Color3.new(1,1,1)
+    inc.MouseButton1Click:Connect(function()
+        Settings[key] = math.min(Settings[key]+step,max)
+        lbl.Text = label .. ": " .. string.format("%.1f", Settings[key])
+    end)
+end
+
+-- Controls
+createNumberControl("Reach Studs", "ReachStuds", 1, 20, 0.1)
+createNumberControl("React Strength", "ReactStrength", 0.3, 1.0, 0.3)
+
+-- ===================== Minimize / Ball =====================
+local minimized = false
+local ball = Instance.new("TextButton", gui)
+ball.Size = UDim2.fromOffset(60,60)
+ball.Position = UDim2.fromScale(0.5,0.5)
+ball.Visible = false
+ball.Text = "⚽"
+ball.TextScaled = true
+ball.BackgroundColor3 = Color3.fromRGB(50,50,50)
+ball.TextColor3 = Color3.new(1,1,1)
+ball.Active = true
+ball.Draggable = true
+
+-- Minimize button
+minimizeBtn.MouseButton1Click:Connect(function()
+    main.Visible = false
+    ball.Visible = true
+end)
+
+-- Restore GUI
+ball.MouseButton1Click:Connect(function()
+    main.Visible = true
+    ball.Visible = false
+end)
+
+-- ===================== Main Loop =====================
+RunService.RenderStepped:Connect(function()
+    if not HRP or not Ball then return end
+    local dist = (HRP.Position - Ball.Position).Magnitude
+
+    if Settings.Reach and dist <= Settings.ReachStuds then
+        firetouchinterest(HRP,Ball,0)
+        firetouchinterest(HRP,Ball,1)
+
+        local direction = (HRP.Position - Ball.Position)
+        Ball.Velocity = Ball.Velocity:Lerp(direction.Unit * (direction.Magnitude * Settings.ReactStrength), 0.25)
+    end
+end)
+
+print("[AFC FITAS] Mobile hub loaded! Reach + React Strength + Minimize ready.")
