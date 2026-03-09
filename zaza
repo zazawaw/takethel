@@ -1,156 +1,1819 @@
--- ===================== Mobile AFC Fitas Hub with Minimize =====================
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local lp = Players.LocalPlayer
-local Character, HRP, Ball
+-- Wang Script | TPS Street Soccer | Private | Mobile/iPhone/Delta
 
--- Load character
-local function loadChar()
-    Character = lp.Character or lp.CharacterAdded:Wait()
-    HRP = Character:WaitForChild("HumanoidRootPart",5)
+-- ============================================================
+-- ANTI-CHEAT BYPASS
+-- ============================================================
+for i, b in pairs(workspace.FE.Actions:GetChildren()) do
+    if b.Name == " " then b:Destroy() end
 end
-loadChar()
-lp.CharacterAdded:Connect(loadChar)
-
--- Find the ball
-task.spawn(function()
-    while task.wait(1) do
-        Ball = workspace:FindFirstChild("TPS", true)
+for i, b in pairs(game.Players.LocalPlayer.Character:GetChildren()) do
+    if b.Name == " " then b:Destroy() end
+end
+local _a = workspace.FE.Actions
+if _a:FindFirstChild("KeepYourHeadUp_") then
+    _a.KeepYourHeadUp_:Destroy()
+    local r = Instance.new("RemoteEvent")
+    r.Name = "KeepYourHeadUp_"
+    r.Parent = _a
+else
+    game.Players.LocalPlayer:Kick("Anti-Cheat Updated!")
+end
+local function _isWeird(name)
+    return string.match(name, "^[a-zA-Z]+%-%d+%a*%-%d+%a*$") ~= nil
+end
+local function _delWeird(parent)
+    for _, child in pairs(parent:GetChildren()) do
+        if child:IsA("RemoteEvent") and _isWeird(child.Name) then child:Destroy() end
+        _delWeird(child)
     end
-end)
+end
+_delWeird(game)
 
--- Settings
-local Settings = {
-    Reach = true,
-    ReachStuds = 2.0,
-    ReactStrength = 0.6
+-- ============================================================
+-- SERVICES
+-- ============================================================
+local Players          = game:GetService("Players")
+local RunService       = game:GetService("RunService")
+local TweenService     = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local Lighting         = game:GetService("Lighting")
+local lplr             = Players.LocalPlayer
+
+local function GetTPS()
+    local s = workspace:FindFirstChild("TPSSystem")
+    return s and s:FindFirstChild("TPS")
+end
+
+local function GetLimb(char, hum)
+    local pf = Lighting:FindFirstChild(lplr.Name)
+    local pfoot = pf and pf:FindFirstChild("PreferredFoot")
+    if not pfoot then return nil end
+    if hum.RigType == Enum.HumanoidRigType.R6 then
+        return char:FindFirstChild(pfoot.Value==1 and "Right Leg" or "Left Leg")
+    else
+        return char:FindFirstChild(pfoot.Value==1 and "RightLowerLeg" or "LeftLowerLeg")
+    end
+end
+
+-- ============================================================
+-- COLOURS
+-- ============================================================
+local BG      = Color3.fromRGB(5,  13, 31)
+local PANEL   = Color3.fromRGB(10, 22, 48)
+local ELEM    = Color3.fromRGB(15, 32, 64)
+local SECT    = Color3.fromRGB(8,  18, 40)
+local ACCENT  = Color3.fromRGB(0,  200,255)
+local ACCENT2 = Color3.fromRGB(0,  80, 220)
+local TXT     = Color3.fromRGB(220,235,255)
+local SUB     = Color3.fromRGB(120,150,200)
+local CON     = Color3.fromRGB(0,  255,120)
+local COFF    = Color3.fromRGB(255, 60, 80)
+local WHITE   = Color3.fromRGB(255,255,255)
+
+-- ============================================================
+-- HELPERS
+-- ============================================================
+local function mkCorner(p, r)
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, r or 8)
+    c.Parent = p
+end
+
+local function mkStroke(p, col, thick)
+    local s = Instance.new("UIStroke")
+    s.Color = col or ACCENT
+    s.Thickness = thick or 1
+    s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    s.Parent = s
+    s.Parent = p
+end
+
+local function mkPad(p, l,r,t,b)
+    local pad = Instance.new("UIPadding")
+    pad.PaddingLeft   = UDim.new(0, l or 0)
+    pad.PaddingRight  = UDim.new(0, r or 0)
+    pad.PaddingTop    = UDim.new(0, t or 0)
+    pad.PaddingBottom = UDim.new(0, b or 0)
+    pad.Parent = p
+end
+
+-- Touch/mouse drag
+local function mkDrag(frame, handle)
+    local drag, dstart, fstart = false, nil, nil
+    local h = handle or frame
+    h.InputBegan:Connect(function(inp)
+        if inp.UserInputType==Enum.UserInputType.Touch or inp.UserInputType==Enum.UserInputType.MouseButton1 then
+            drag=true; dstart=inp.Position; fstart=frame.Position
+            inp.Changed:Connect(function()
+                if inp.UserInputState==Enum.UserInputState.End then drag=false end
+            end)
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(inp)
+        if drag and (inp.UserInputType==Enum.UserInputType.Touch or inp.UserInputType==Enum.UserInputType.MouseMovement) then
+            local d = inp.Position - dstart
+            frame.Position = UDim2.new(fstart.X.Scale, fstart.X.Offset+d.X, fstart.Y.Scale, fstart.Y.Offset+d.Y)
+        end
+    end)
+end
+
+-- Notification toast
+local function notify(title, desc, good)
+    local gui = Instance.new("ScreenGui")
+    gui.IgnoreGuiInset=true; gui.ResetOnSpawn=false
+    gui.Parent = lplr.PlayerGui
+    local f = Instance.new("Frame")
+    f.Size=UDim2.new(0,250,0,54); f.Position=UDim2.new(0.5,-125,0,-60)
+    f.BackgroundColor3=PANEL; f.BorderSizePixel=0; f.Parent=gui
+    mkCorner(f,10)
+    local s=Instance.new("UIStroke"); s.Color=good~=false and CON or COFF; s.Thickness=1.5; s.Parent=f
+    local dot=Instance.new("Frame"); dot.Size=UDim2.new(0,5,0,5); dot.Position=UDim2.new(0,11,0.5,-2.5)
+    dot.BackgroundColor3=good~=false and CON or COFF; dot.BorderSizePixel=0; dot.Parent=f; mkCorner(dot,3)
+    local tl=Instance.new("TextLabel"); tl.Size=UDim2.new(1,-24,0,22); tl.Position=UDim2.new(0,22,0,4)
+    tl.BackgroundTransparency=1; tl.Text=title; tl.TextSize=13; tl.Font=Enum.Font.GothamBold
+    tl.TextColor3=TXT; tl.TextXAlignment=Enum.TextXAlignment.Left; tl.Parent=f
+    local dl=Instance.new("TextLabel"); dl.Size=UDim2.new(1,-24,0,18); dl.Position=UDim2.new(0,22,0,28)
+    dl.BackgroundTransparency=1; dl.Text=desc or ""; dl.TextSize=11; dl.Font=Enum.Font.Gotham
+    dl.TextColor3=SUB; dl.TextXAlignment=Enum.TextXAlignment.Left; dl.Parent=f
+    TweenService:Create(f,TweenInfo.new(0.25,Enum.EasingStyle.Back),{Position=UDim2.new(0.5,-125,0,14)}):Play()
+    task.delay(2.5,function()
+        TweenService:Create(f,TweenInfo.new(0.2),{Position=UDim2.new(0.5,-125,0,-70)}):Play()
+        task.wait(0.25); gui:Destroy()
+    end)
+end
+
+-- ============================================================
+-- SCREEN GUI
+-- ============================================================
+-- Remove old instance if re-executing
+local old = lplr.PlayerGui:FindFirstChild("WangScript")
+if old then old:Destroy() end
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "WangScript"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ScreenGui.IgnoreGuiInset = true
+ScreenGui.DisplayOrder = 999
+ScreenGui.Parent = lplr.PlayerGui
+
+-- ============================================================
+-- MAIN WINDOW
+-- ============================================================
+local WIN_W, WIN_H = 340, 500
+
+local Win = Instance.new("Frame")
+Win.Name = "Win"
+Win.Size = UDim2.new(0, WIN_W, 0, WIN_H)
+Win.Position = UDim2.new(0, 20, 0, 60)   -- top-left so title bar is reachable
+Win.BackgroundColor3 = BG
+Win.BorderSizePixel = 0
+Win.ClipsDescendants = false
+Win.Parent = ScreenGui
+mkCorner(Win, 12)
+
+local WinStroke = Instance.new("UIStroke")
+WinStroke.Color = ACCENT
+WinStroke.Thickness = 1.5
+WinStroke.Parent = Win
+
+-- inner clip frame (so content doesn't bleed over rounded corners)
+local WinInner = Instance.new("Frame")
+WinInner.Size = UDim2.new(1,0,1,0)
+WinInner.BackgroundTransparency = 1
+WinInner.ClipsDescendants = true
+WinInner.Parent = Win
+mkCorner(WinInner, 12)
+
+-- ── Title Bar ──────────────────────────────────────────────
+local TBar = Instance.new("Frame")
+TBar.Name = "TBar"
+TBar.Size = UDim2.new(1, 0, 0, 44)
+TBar.Position = UDim2.new(0,0,0,0)
+TBar.BackgroundColor3 = ACCENT2
+TBar.BorderSizePixel = 0
+TBar.ZIndex = 5
+TBar.Parent = WinInner
+mkCorner(TBar, 12)
+
+-- gradient
+local tgrad = Instance.new("UIGradient")
+tgrad.Color = ColorSequence.new{
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(0,60,200)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(0,180,255))
 }
+tgrad.Rotation = 90
+tgrad.Parent = TBar
 
--- ===================== GUI =====================
-local gui = Instance.new("ScreenGui")
-gui.Name = "AFC_Alzzy_Dribble"
-gui.ResetOnSpawn = false
-gui.Parent = lp:WaitForChild("PlayerGui")
+-- fill bottom of title bar so gradient doesn't show gap
+local TBarFill = Instance.new("Frame")
+TBarFill.Size = UDim2.new(1,0,0,12)
+TBarFill.Position = UDim2.new(0,0,1,-12)
+TBarFill.BackgroundColor3 = Color3.fromRGB(0,60,200)
+TBarFill.BorderSizePixel = 0
+TBarFill.ZIndex = 5
+TBarFill.Parent = TBar
 
--- Main frame
-local main = Instance.new("Frame", gui)
-main.Size = UDim2.fromScale(0.95,0.8)
-main.Position = UDim2.fromScale(0.025,0.1)
-main.BackgroundColor3 = Color3.fromRGB(25,25,25)
-main.Active = true
-main.Draggable = true
+local TitleLbl = Instance.new("TextLabel")
+TitleLbl.Size = UDim2.new(1,-90,1,0)
+TitleLbl.Position = UDim2.new(0,12,0,0)
+TitleLbl.BackgroundTransparency = 1
+TitleLbl.Text = "⚽  Wang Script"
+TitleLbl.TextSize = 15
+TitleLbl.Font = Enum.Font.GothamBold
+TitleLbl.TextColor3 = WHITE
+TitleLbl.TextXAlignment = Enum.TextXAlignment.Left
+TitleLbl.ZIndex = 6
+TitleLbl.Parent = TBar
 
--- Title
-local title = Instance.new("TextLabel", main)
-title.Size = UDim2.fromScale(1,0.1)
-title.Position = UDim2.fromScale(0,0)
-title.Text = "AFC Fitas Alzzy Hub"
-title.TextScaled = true
-title.BackgroundTransparency = 1
-title.TextColor3 = Color3.new(1,1,1)
+local SubLbl = Instance.new("TextLabel")
+SubLbl.Size = UDim2.new(0,100,0,14)
+SubLbl.Position = UDim2.new(1,-150,0.5,-7)
+SubLbl.BackgroundTransparency = 1
+SubLbl.Text = "TPS Street Soccer"
+SubLbl.TextSize = 10
+SubLbl.Font = Enum.Font.Gotham
+SubLbl.TextColor3 = Color3.fromRGB(180,220,255)
+SubLbl.TextXAlignment = Enum.TextXAlignment.Right
+SubLbl.ZIndex = 6
+SubLbl.Parent = TBar
 
--- Minimize button
-local minimizeBtn = Instance.new("TextButton", main)
-minimizeBtn.Size = UDim2.fromScale(0.15,0.1)
-minimizeBtn.Position = UDim2.fromScale(0.85,0)
-minimizeBtn.Text = "—"
-minimizeBtn.TextScaled = true
-minimizeBtn.BackgroundColor3 = Color3.fromRGB(50,50,50)
-minimizeBtn.TextColor3 = Color3.new(1,1,1)
+-- Close button
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Size = UDim2.new(0,30,0,26)
+CloseBtn.Position = UDim2.new(1,-36,0.5,-13)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(220,40,60)
+CloseBtn.Text = "✕"
+CloseBtn.TextSize = 14
+CloseBtn.Font = Enum.Font.GothamBold
+CloseBtn.TextColor3 = WHITE
+CloseBtn.BorderSizePixel = 0
+CloseBtn.ZIndex = 7
+CloseBtn.Parent = TBar
+mkCorner(CloseBtn, 6)
 
--- Scrollable area
-local scroll = Instance.new("ScrollingFrame", main)
-scroll.Size = UDim2.fromScale(1,0.9)
-scroll.Position = UDim2.fromScale(0,0.1)
-scroll.CanvasSize = UDim2.new(0,0,0,0)
-scroll.ScrollBarThickness = 10
-scroll.BackgroundTransparency = 1
-scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+mkDrag(Win, TBar)   -- drag whole window by title bar
 
-local layout = Instance.new("UIListLayout", scroll)
-layout.SortOrder = Enum.SortOrder.LayoutOrder
-layout.Padding = UDim.new(0,10)
+-- ── Tab Strip ──────────────────────────────────────────────
+local TabStrip = Instance.new("ScrollingFrame")
+TabStrip.Size = UDim2.new(1,0,0,36)
+TabStrip.Position = UDim2.new(0,0,0,44)
+TabStrip.BackgroundColor3 = PANEL
+TabStrip.BorderSizePixel = 0
+TabStrip.ScrollBarThickness = 0
+TabStrip.CanvasSize = UDim2.new(0,0,0,0)
+TabStrip.ScrollingDirection = Enum.ScrollingDirection.X
+TabStrip.ZIndex = 4
+TabStrip.Parent = WinInner
 
--- ===================== Number Control =====================
-local function createNumberControl(label, key, min, max, step)
-    local holder = Instance.new("Frame")
-    holder.Size = UDim2.new(0.9,0,0,60)
-    holder.BackgroundTransparency = 1
-    holder.Parent = scroll
+local TabLayout = Instance.new("UIListLayout")
+TabLayout.FillDirection = Enum.FillDirection.Horizontal
+TabLayout.Padding = UDim.new(0,4)
+TabLayout.SortOrder = Enum.SortOrder.LayoutOrder
+TabLayout.Parent = TabStrip
+mkPad(TabStrip, 6,6,5,0)
 
-    local lbl = Instance.new("TextLabel", holder)
-    lbl.Size = UDim2.new(0.4,0,1,0)
-    lbl.Text = label .. ": " .. string.format("%.1f", Settings[key])
-    lbl.TextScaled = true
-    lbl.BackgroundTransparency = 1
-    lbl.TextColor3 = Color3.new(1,1,1)
+TabLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    TabStrip.CanvasSize = UDim2.new(0, TabLayout.AbsoluteContentSize.X+12, 0, 0)
+end)
 
-    local dec = Instance.new("TextButton", holder)
-    dec.Size = UDim2.new(0.3,0,1,0)
-    dec.Position = UDim2.new(0.4,0,0,0)
-    dec.Text = "-"
-    dec.TextScaled = true
-    dec.BackgroundColor3 = Color3.fromRGB(60,60,60)
-    dec.TextColor3 = Color3.new(1,1,1)
-    dec.MouseButton1Click:Connect(function()
-        Settings[key] = math.max(Settings[key]-step,min)
-        lbl.Text = label .. ": " .. string.format("%.1f", Settings[key])
+-- ── Content Area ───────────────────────────────────────────
+local ContentArea = Instance.new("Frame")
+ContentArea.Size = UDim2.new(1,0,1,-80)
+ContentArea.Position = UDim2.new(0,0,0,80)
+ContentArea.BackgroundTransparency = 1
+ContentArea.ClipsDescendants = true
+ContentArea.ZIndex = 2
+ContentArea.Parent = WinInner
+
+-- Divider line between tab strip and content
+local Divider = Instance.new("Frame")
+Divider.Size = UDim2.new(1,0,0,1)
+Divider.Position = UDim2.new(0,0,0,80)
+Divider.BackgroundColor3 = ACCENT2
+Divider.BorderSizePixel = 0
+Divider.ZIndex = 5
+Divider.Parent = WinInner
+
+-- ── Floating reopen button ─────────────────────────────────
+local ReopenBtn = Instance.new("TextButton")
+ReopenBtn.Size = UDim2.new(0,54,0,54)
+ReopenBtn.Position = UDim2.new(0,20,0.85,0)
+ReopenBtn.BackgroundColor3 = ACCENT2
+ReopenBtn.Text = "⚽"
+ReopenBtn.TextSize = 24
+ReopenBtn.Font = Enum.Font.GothamBold
+ReopenBtn.TextColor3 = WHITE
+ReopenBtn.BorderSizePixel = 0
+ReopenBtn.Visible = false
+ReopenBtn.ZIndex = 10
+ReopenBtn.Parent = ScreenGui
+mkCorner(ReopenBtn, 27)
+local ros = Instance.new("UIStroke"); ros.Color=ACCENT; ros.Thickness=2; ros.Parent=ReopenBtn
+mkDrag(ReopenBtn)
+
+CloseBtn.MouseButton1Click:Connect(function()
+    Win.Visible = false
+    ReopenBtn.Visible = true
+end)
+ReopenBtn.MouseButton1Click:Connect(function()
+    Win.Visible = true
+    ReopenBtn.Visible = false
+end)
+
+-- ============================================================
+-- TAB SYSTEM
+-- ============================================================
+local Tabs = {}
+local ActiveTab = nil
+
+local function openTab(tabData)
+    if ActiveTab then
+        ActiveTab.page.Visible = false
+        ActiveTab.btn.BackgroundColor3 = ELEM
+        ActiveTab.btn.TextColor3 = SUB
+    end
+    tabData.page.Visible = true
+    tabData.btn.BackgroundColor3 = ACCENT2
+    tabData.btn.TextColor3 = WHITE
+    ActiveTab = tabData
+end
+
+local function mkTab(name, icon)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0,0,0,26)
+    btn.AutomaticSize = Enum.AutomaticSize.X
+    btn.BackgroundColor3 = ELEM
+    btn.Text = (icon and icon.."  " or "")..name
+    btn.TextSize = 11
+    btn.Font = Enum.Font.GothamSemibold
+    btn.TextColor3 = SUB
+    btn.BorderSizePixel = 0
+    btn.LayoutOrder = #Tabs+1
+    btn.ZIndex = 5
+    btn.Parent = TabStrip
+    mkCorner(btn, 5)
+    mkPad(btn, 8,8,0,0)
+
+    local page = Instance.new("ScrollingFrame")
+    page.Size = UDim2.new(1,0,1,0)
+    page.BackgroundTransparency = 1
+    page.BorderSizePixel = 0
+    page.ScrollBarThickness = 3
+    page.ScrollBarImageColor3 = ACCENT
+    page.CanvasSize = UDim2.new(0,0,0,0)
+    page.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    page.Visible = false
+    page.ZIndex = 2
+    page.Parent = ContentArea
+
+    local lay = Instance.new("UIListLayout")
+    lay.Padding = UDim.new(0,6)
+    lay.SortOrder = Enum.SortOrder.LayoutOrder
+    lay.Parent = page
+    mkPad(page, 8,8,8,8)
+
+    local td = {btn=btn, page=page, name=name, order=0}
+    btn.MouseButton1Click:Connect(function() openTab(td) end)
+    table.insert(Tabs, td)
+    return td
+end
+
+-- ============================================================
+-- ELEMENT BUILDERS
+-- ============================================================
+
+local function mkSection(tab, title)
+    local f = Instance.new("Frame")
+    f.Size = UDim2.new(1,0,0,20)
+    f.BackgroundTransparency = 1
+    f.LayoutOrder = tab.order; tab.order+=1
+    f.Parent = tab.page
+    local l = Instance.new("TextLabel")
+    l.Size = UDim2.new(1,0,1,0)
+    l.BackgroundTransparency = 1
+    l.Text = "─── "..title.." ───"
+    l.TextSize = 11; l.Font = Enum.Font.GothamBold
+    l.TextColor3 = ACCENT
+    l.TextXAlignment = Enum.TextXAlignment.Center
+    l.Parent = f
+end
+
+local function mkToggle(tab, title, desc, default, cb)
+    local state = default or false
+    local h = desc and 52 or 42
+
+    local f = Instance.new("Frame")
+    f.Size = UDim2.new(1,0,0,h)
+    f.BackgroundColor3 = ELEM
+    f.BorderSizePixel = 0
+    f.LayoutOrder = tab.order; tab.order+=1
+    f.Parent = tab.page
+    mkCorner(f,7)
+
+    local tl = Instance.new("TextLabel")
+    tl.Size = UDim2.new(1,-58,0,18)
+    tl.Position = UDim2.new(0,10,0,desc and 8 or 12)
+    tl.BackgroundTransparency=1; tl.Text=title
+    tl.TextSize=13; tl.Font=Enum.Font.GothamSemibold
+    tl.TextColor3=TXT; tl.TextXAlignment=Enum.TextXAlignment.Left
+    tl.Parent=f
+
+    if desc then
+        local dl = Instance.new("TextLabel")
+        dl.Size = UDim2.new(1,-58,0,16)
+        dl.Position = UDim2.new(0,10,0,28)
+        dl.BackgroundTransparency=1; dl.Text=desc
+        dl.TextSize=10; dl.Font=Enum.Font.Gotham
+        dl.TextColor3=SUB; dl.TextXAlignment=Enum.TextXAlignment.Left
+        dl.TextWrapped=true; dl.Parent=f
+    end
+
+    -- pill
+    local pill = Instance.new("Frame")
+    pill.Size = UDim2.new(0,42,0,22)
+    pill.Position = UDim2.new(1,-50,0.5,-11)
+    pill.BackgroundColor3 = state and CON or COFF
+    pill.BorderSizePixel=0; pill.Parent=f
+    mkCorner(pill,11)
+
+    local knob = Instance.new("Frame")
+    knob.Size = UDim2.new(0,16,0,16)
+    knob.Position = UDim2.new(0, state and 22 or 4, 0.5,-8)
+    knob.BackgroundColor3=WHITE; knob.BorderSizePixel=0; knob.Parent=pill
+    mkCorner(knob,8)
+
+    local hit = Instance.new("TextButton")
+    hit.Size=UDim2.new(1,0,1,0); hit.BackgroundTransparency=1; hit.Text=""; hit.Parent=f
+    hit.MouseButton1Click:Connect(function()
+        state=not state
+        TweenService:Create(pill,TweenInfo.new(0.12),{BackgroundColor3=state and CON or COFF}):Play()
+        TweenService:Create(knob,TweenInfo.new(0.12),{Position=UDim2.new(0,state and 22 or 4,0.5,-8)}):Play()
+        cb(state)
     end)
+    return {set=function(v)
+        state=v; pill.BackgroundColor3=v and CON or COFF
+        knob.Position=UDim2.new(0,v and 22 or 4,0.5,-8)
+    end}
+end
 
-    local inc = Instance.new("TextButton", holder)
-    inc.Size = UDim2.new(0.3,0,1,0)
-    inc.Position = UDim2.new(0.7,0,0,0)
-    inc.Text = "+"
-    inc.TextScaled = true
-    inc.BackgroundColor3 = Color3.fromRGB(60,60,60)
-    inc.TextColor3 = Color3.new(1,1,1)
-    inc.MouseButton1Click:Connect(function()
-        Settings[key] = math.min(Settings[key]+step,max)
-        lbl.Text = label .. ": " .. string.format("%.1f", Settings[key])
+local function mkButton(tab, title, cb)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1,0,0,38)
+    btn.BackgroundColor3 = SECT
+    btn.Text = title
+    btn.TextSize = 13; btn.Font = Enum.Font.GothamSemibold
+    btn.TextColor3 = ACCENT
+    btn.BorderSizePixel = 0
+    btn.LayoutOrder = tab.order; tab.order+=1
+    btn.Parent = tab.page
+    mkCorner(btn,7)
+    local bs = Instance.new("UIStroke"); bs.Color=ACCENT2; bs.Thickness=1; bs.Parent=btn
+    btn.MouseButton1Click:Connect(function()
+        TweenService:Create(btn,TweenInfo.new(0.07),{BackgroundColor3=ACCENT2}):Play()
+        task.delay(0.14,function() TweenService:Create(btn,TweenInfo.new(0.07),{BackgroundColor3=SECT}):Play() end)
+        cb()
     end)
 end
 
--- Controls
-createNumberControl("Reach Studs", "ReachStuds", 1, 20, 0.1)
-createNumberControl("React Strength", "ReactStrength", 0.3, 1.0, 0.3)
+local function mkSlider(tab, title, mn, mx, def, step, cb)
+    local val = def or mn
+    step = step or 1
 
--- ===================== Minimize / Ball =====================
-local minimized = false
-local ball = Instance.new("TextButton", gui)
-ball.Size = UDim2.fromOffset(60,60)
-ball.Position = UDim2.fromScale(0.5,0.5)
-ball.Visible = false
-ball.Text = "⚽"
-ball.TextScaled = true
-ball.BackgroundColor3 = Color3.fromRGB(50,50,50)
-ball.TextColor3 = Color3.new(1,1,1)
-ball.Active = true
-ball.Draggable = true
+    local f = Instance.new("Frame")
+    f.Size=UDim2.new(1,0,0,58)
+    f.BackgroundColor3=ELEM; f.BorderSizePixel=0
+    f.LayoutOrder=tab.order; tab.order+=1; f.Parent=tab.page
+    mkCorner(f,7)
 
--- Minimize button
-minimizeBtn.MouseButton1Click:Connect(function()
-    main.Visible = false
-    ball.Visible = true
+    local row = Instance.new("Frame")
+    row.Size=UDim2.new(1,-16,0,20); row.Position=UDim2.new(0,8,0,7)
+    row.BackgroundTransparency=1; row.Parent=f
+
+    local tl=Instance.new("TextLabel"); tl.Size=UDim2.new(0.7,0,1,0)
+    tl.BackgroundTransparency=1; tl.Text=title; tl.TextSize=12
+    tl.Font=Enum.Font.GothamSemibold; tl.TextColor3=TXT
+    tl.TextXAlignment=Enum.TextXAlignment.Left; tl.Parent=row
+
+    local vl=Instance.new("TextLabel"); vl.Size=UDim2.new(0.3,0,1,0)
+    vl.Position=UDim2.new(0.7,0,0,0); vl.BackgroundTransparency=1
+    vl.Text=tostring(val); vl.TextSize=12; vl.Font=Enum.Font.GothamBold
+    vl.TextColor3=ACCENT; vl.TextXAlignment=Enum.TextXAlignment.Right; vl.Parent=row
+
+    local track=Instance.new("Frame")
+    track.Size=UDim2.new(1,-16,0,6); track.Position=UDim2.new(0,8,0,36)
+    track.BackgroundColor3=SECT; track.BorderSizePixel=0; track.Parent=f
+    mkCorner(track,3)
+
+    local fill=Instance.new("Frame")
+    fill.Size=UDim2.new((val-mn)/(mx-mn),0,1,0)
+    fill.BackgroundColor3=ACCENT; fill.BorderSizePixel=0; fill.Parent=track
+    mkCorner(fill,3)
+
+    local knob=Instance.new("Frame")
+    knob.Size=UDim2.new(0,16,0,16); knob.AnchorPoint=Vector2.new(0.5,0.5)
+    knob.Position=UDim2.new((val-mn)/(mx-mn),0,0.5,0)
+    knob.BackgroundColor3=WHITE; knob.BorderSizePixel=0; knob.ZIndex=3; knob.Parent=track
+    mkCorner(knob,8)
+
+    local dragging=false
+    local function upd(ax)
+        local rel=math.clamp((ax-track.AbsolutePosition.X)/track.AbsoluteSize.X,0,1)
+        val=math.floor(((mn+rel*(mx-mn))/step)+0.5)*step
+        val=math.clamp(val,mn,mx)
+        local pct=(val-mn)/(mx-mn)
+        fill.Size=UDim2.new(pct,0,1,0)
+        knob.Position=UDim2.new(pct,0,0.5,0)
+        vl.Text=tostring(val)
+        cb(val)
+    end
+
+    local hit=Instance.new("TextButton")
+    hit.Size=UDim2.new(1,0,1,0); hit.BackgroundTransparency=1; hit.Text=""; hit.Parent=f
+    hit.InputBegan:Connect(function(inp)
+        if inp.UserInputType==Enum.UserInputType.Touch or inp.UserInputType==Enum.UserInputType.MouseButton1 then
+            dragging=true; upd(inp.Position.X)
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(inp)
+        if dragging and (inp.UserInputType==Enum.UserInputType.Touch or inp.UserInputType==Enum.UserInputType.MouseMovement) then
+            upd(inp.Position.X)
+        end
+    end)
+    UserInputService.InputEnded:Connect(function(inp)
+        if inp.UserInputType==Enum.UserInputType.Touch or inp.UserInputType==Enum.UserInputType.MouseButton1 then
+            dragging=false
+        end
+    end)
+end
+
+local function mkInput(tab, title, ph, cb)
+    local f=Instance.new("Frame")
+    f.Size=UDim2.new(1,0,0,62); f.BackgroundColor3=ELEM; f.BorderSizePixel=0
+    f.LayoutOrder=tab.order; tab.order+=1; f.Parent=tab.page
+    mkCorner(f,7)
+    local tl=Instance.new("TextLabel"); tl.Size=UDim2.new(1,-12,0,18); tl.Position=UDim2.new(0,8,0,5)
+    tl.BackgroundTransparency=1; tl.Text=title; tl.TextSize=12; tl.Font=Enum.Font.GothamSemibold
+    tl.TextColor3=TXT; tl.TextXAlignment=Enum.TextXAlignment.Left; tl.Parent=f
+    local box=Instance.new("TextBox")
+    box.Size=UDim2.new(1,-16,0,28); box.Position=UDim2.new(0,8,0,26)
+    box.BackgroundColor3=SECT; box.Text=""; box.PlaceholderText=ph or ""
+    box.TextSize=12; box.Font=Enum.Font.Gotham; box.TextColor3=TXT
+    box.PlaceholderColor3=SUB; box.BorderSizePixel=0; box.ClearTextOnFocus=false
+    box.Parent=f; mkCorner(box,6); mkPad(box,8,0,0,0)
+    box.FocusLost:Connect(function(enter) if enter then cb(box.Text) end end)
+    return box
+end
+
+local function mkParagraph(tab, title, body)
+    local f=Instance.new("Frame")
+    f.AutomaticSize=Enum.AutomaticSize.Y; f.Size=UDim2.new(1,0,0,0)
+    f.BackgroundColor3=SECT; f.BorderSizePixel=0
+    f.LayoutOrder=tab.order; tab.order+=1; f.Parent=tab.page
+    mkCorner(f,7); mkPad(f,10,10,8,8)
+    local lay=Instance.new("UIListLayout"); lay.Padding=UDim.new(0,3); lay.Parent=f
+    if title and title~="" then
+        local tl=Instance.new("TextLabel"); tl.AutomaticSize=Enum.AutomaticSize.Y
+        tl.Size=UDim2.new(1,0,0,0); tl.BackgroundTransparency=1; tl.Text=title
+        tl.TextSize=12; tl.Font=Enum.Font.GothamBold; tl.TextColor3=ACCENT
+        tl.TextXAlignment=Enum.TextXAlignment.Left; tl.TextWrapped=true
+        tl.LayoutOrder=1; tl.Parent=f
+    end
+    local bl=Instance.new("TextLabel"); bl.AutomaticSize=Enum.AutomaticSize.Y
+    bl.Size=UDim2.new(1,0,0,0); bl.BackgroundTransparency=1; bl.Text=body
+    bl.TextSize=11; bl.Font=Enum.Font.Gotham; bl.TextColor3=SUB
+    bl.TextXAlignment=Enum.TextXAlignment.Left; bl.TextWrapped=true
+    bl.LayoutOrder=2; bl.Parent=f
+end
+
+local function mkDropdown(tab, title, opts, cb)
+    local open=false
+    local cont=Instance.new("Frame")
+    cont.Size=UDim2.new(1,0,0,40); cont.BackgroundColor3=ELEM; cont.BorderSizePixel=0
+    cont.LayoutOrder=tab.order; tab.order+=1; cont.ClipsDescendants=false; cont.Parent=tab.page
+    mkCorner(cont,7)
+
+    local hdr=Instance.new("TextButton")
+    hdr.Size=UDim2.new(1,0,0,40); hdr.BackgroundTransparency=1; hdr.Text=""; hdr.ZIndex=3; hdr.Parent=cont
+
+    local tl=Instance.new("TextLabel"); tl.Size=UDim2.new(1,-44,1,0); tl.Position=UDim2.new(0,10,0,0)
+    tl.BackgroundTransparency=1; tl.Text=title..": tap to open"; tl.TextSize=12
+    tl.Font=Enum.Font.GothamSemibold; tl.TextColor3=TXT
+    tl.TextXAlignment=Enum.TextXAlignment.Left; tl.ZIndex=3; tl.Parent=hdr
+
+    local arr=Instance.new("TextLabel"); arr.Size=UDim2.new(0,28,1,0); arr.Position=UDim2.new(1,-34,0,0)
+    arr.BackgroundTransparency=1; arr.Text="▾"; arr.TextSize=14; arr.Font=Enum.Font.GothamBold
+    arr.TextColor3=ACCENT; arr.ZIndex=3; arr.Parent=hdr
+
+    local dd=Instance.new("Frame")
+    dd.Size=UDim2.new(1,0,0,0); dd.Position=UDim2.new(0,0,0,40)
+    dd.BackgroundColor3=SECT; dd.BorderSizePixel=0; dd.ZIndex=10; dd.Visible=false; dd.Parent=cont
+    mkCorner(dd,7)
+    local ddlay=Instance.new("UIListLayout"); ddlay.SortOrder=Enum.SortOrder.LayoutOrder; ddlay.Parent=dd
+
+    for i,opt in ipairs(opts) do
+        local ib=Instance.new("TextButton")
+        ib.Size=UDim2.new(1,0,0,34); ib.BackgroundColor3=SECT; ib.Text=opt
+        ib.TextSize=12; ib.Font=Enum.Font.Gotham; ib.TextColor3=TXT
+        ib.BorderSizePixel=0; ib.ZIndex=10; ib.LayoutOrder=i; ib.Parent=dd
+        mkPad(ib,12,0,0,0)
+        ib.MouseButton1Click:Connect(function()
+            tl.Text=title..": "..opt; open=false; dd.Visible=false
+            arr.Text="▾"; cont.Size=UDim2.new(1,0,0,40); dd.Size=UDim2.new(1,0,0,0)
+            cb(opt)
+        end)
+    end
+
+    hdr.MouseButton1Click:Connect(function()
+        open=not open; dd.Visible=open; arr.Text=open and "▴" or "▾"
+        local h2=#opts*34
+        cont.Size=UDim2.new(1,0,0,open and 40+h2 or 40)
+        dd.Size=UDim2.new(1,0,0,open and h2 or 0)
+    end)
+end
+
+-- ============================================================
+-- CREATE ALL TABS
+-- ============================================================
+local tReach    = mkTab("Reach",    "🦵")
+local tMoss     = mkTab("Mossing",  "🙋")
+local tVolley   = mkTab("Volley",   "🏐")
+local tReacts   = mkTab("Reacts",   "⚡")
+local tPlayer   = mkTab("Player",   "👤")
+local tPerf     = mkTab("Perf",     "📶")
+local tHelpers  = mkTab("Helpers",  "🎯")
+local tBall     = mkTab("Ball",     "⚽")
+local tGP       = mkTab("GP",       "💎")
+local tTP       = mkTab("TP",       "🌀")
+local tSky      = mkTab("Sky",      "🌌")
+local tSettings = mkTab("Settings", "⚙️")
+
+-- Open first tab immediately (proper call, not :Fire())
+openTab(tReach)
+
+-- ============================================================
+-- ── REACH TAB ──────────────────────────────────────────────
+-- ============================================================
+local reachOn=false; local reachDist=1; local reachConn
+
+local function rebuildReach()
+    if reachConn then reachConn:Disconnect(); reachConn=nil end
+    if not reachOn then return end
+    reachConn=RunService.RenderStepped:Connect(function()
+        local c=lplr.Character; local root=c and c:FindFirstChild("HumanoidRootPart")
+        local hum=c and c:FindFirstChildOfClass("Humanoid")
+        if not(c and root and hum) then return end
+        local TPS=GetTPS(); if not TPS then return end
+        if(root.Position-TPS.Position).Magnitude<=reachDist then
+            local limb=GetLimb(c,hum); if limb then
+                firetouchinterest(limb,TPS,0); firetouchinterest(limb,TPS,1)
+            end
+        end
+    end)
+end
+
+mkSection(tReach,"Reach (FireTouchInterest)")
+mkToggle(tReach,"Enable Reach","Fires touch on ball when in range",false,function(v)
+    reachOn=v; rebuildReach(); notify("Reach",v and "ON" or "OFF",v)
+end)
+mkSlider(tReach,"Reach Distance",1,15,1,0.5,function(v) reachDist=v; rebuildReach() end)
+
+mkSection(tReach,"Leg Size Reach")
+mkInput(tReach,"Leg Size R6","e.g. 3",function(v)
+    local n=tonumber(v); if not n then return end
+    local c=lplr.Character; if not c then return end
+    for _,nm in ipairs({"Right Leg","Left Leg"}) do
+        local p=c:FindFirstChild(nm); if p then p.Size=Vector3.new(n,2,n); p.CanCollide=false end
+    end
+    local h=c:FindFirstChild("HumanoidRootPart"); if h then h.Size=Vector3.new(n,2,n); h.CanCollide=false end
+    notify("R6 Legs","Size → "..v,true)
+end)
+mkInput(tReach,"Leg Size R15","e.g. 3",function(v)
+    local n=tonumber(v); if not n then return end
+    local c=lplr.Character; if not c then return end
+    for _,nm in ipairs({"RightLowerLeg","LeftLowerLeg"}) do
+        local p=c:FindFirstChild(nm); if p then p.Size=Vector3.new(n,2,n); p.CanCollide=false end
+    end
+    local h=c:FindFirstChild("HumanoidRootPart"); if h then h.Size=Vector3.new(n,2,n); h.CanCollide=false end
+    notify("R15 Legs","Size → "..v,true)
 end)
 
--- Restore GUI
-ball.MouseButton1Click:Connect(function()
-    main.Visible = true
-    ball.Visible = false
+mkSection(tReach,"Fake Legs (Look Normal)")
+mkButton(tReach,"Apply Fake Legs",function()
+    local c=lplr.Character; if not c then return end
+    local hum=c:FindFirstChildOfClass("Humanoid"); if not hum then return end
+    if hum.RigType==Enum.HumanoidRigType.R6 then
+        c["Right Leg"].Transparency=1; c["Left Leg"].Transparency=1
+        for _,side in ipairs({"Left","Right"}) do
+            local real=c[side.." Leg"]; real.Massless=true
+            local fake=Instance.new("Part",c); fake.Name=side.." Leg"
+            fake.CanCollide=false; fake.Color=real.Color; fake.Size=Vector3.new(1,2,1)
+            fake.Locked=true; fake.Position=real.Position
+            local att=Instance.new("Attachment",fake)
+            att.Name=side.."FootAttachment"; att.Position=Vector3.new(0,-1,0)
+            local m=Instance.new("Motor6D",c.Torso); m.Name="Fake "..side.." Hip"
+            if side=="Left" then
+                m.C0=CFrame.new(-1,-1,0,0,0,-1,0,1,0,1,0,0)
+                m.C1=CFrame.new(-0.5,1,0,0,0,-1,0,1,0,1,0,0)
+            else
+                m.C0=CFrame.new(1,-1,0,0,0,1,0,1,0,-1,0,0)
+                m.C1=CFrame.new(0.5,1,0,0,0,1,0,1,0,-1,0,0)
+            end
+            m.Part0=c.Torso; m.Part1=fake
+        end
+    elseif hum.RigType==Enum.HumanoidRigType.R15 then
+        c["RightLowerLeg"].Transparency=1; c["LeftLowerLeg"].Transparency=1
+    end
+    notify("Fake Legs","Applied!",true)
 end)
 
--- ===================== Main Loop =====================
-RunService.RenderStepped:Connect(function()
-    if not HRP or not Ball then return end
-    local dist = (HRP.Position - Ball.Position).Magnitude
+-- ============================================================
+-- ── MOSSING TAB ────────────────────────────────────────────
+-- ============================================================
+local headOn=false; local headSize=Vector3.new(1,1.5,1)
+local headTrans=0.5; local headPart; local headConn
 
-    if Settings.Reach and dist <= Settings.ReachStuds then
-        firetouchinterest(HRP,Ball,0)
-        firetouchinterest(HRP,Ball,1)
+local function rebuildHead()
+    if headPart then headPart:Destroy(); headPart=nil end
+    if headConn then headConn:Disconnect(); headConn=nil end
+    if not headOn then return end
+    headPart=Instance.new("Part"); headPart.Size=headSize
+    headPart.Transparency=headTrans; headPart.Anchored=true
+    headPart.CanCollide=false; headPart.Color=Color3.fromRGB(255,105,180)
+    headPart.Parent=workspace
+    headConn=RunService.RenderStepped:Connect(function()
+        local c=lplr.Character; local h=c and c:FindFirstChild("Head")
+        if h and headPart and headPart.Parent then headPart.CFrame=CFrame.new(h.Position) end
+        local TPS=GetTPS()
+        if TPS and headPart and headPart.Parent then
+            if(headPart.Position-TPS.Position).Magnitude<(headSize.X/2+TPS.Size.X/2) then
+                local hum=c and c:FindFirstChildOfClass("Humanoid")
+                if hum then local limb=GetLimb(c,hum) or (c and c:FindFirstChild("Head"))
+                    if limb then firetouchinterest(limb,TPS,0); firetouchinterest(limb,TPS,1) end
+                end
+            end
+        end
+    end)
+end
 
-        local direction = (HRP.Position - Ball.Position)
-        Ball.Velocity = Ball.Velocity:Lerp(direction.Unit * (direction.Magnitude * Settings.ReactStrength), 0.25)
+mkSection(tMoss,"Head Reach (Mossing)")
+mkToggle(tMoss,"Enable Head Reach",nil,false,function(v) headOn=v; rebuildHead(); notify("Head Reach",v and "ON" or "OFF",v) end)
+mkToggle(tMoss,"Appear Normal (invisible box)",nil,false,function(v)
+    headTrans=v and 1 or 0.5; if headPart then headPart.Transparency=headTrans end
+end)
+mkSection(tMoss,"Box Size")
+mkSlider(tMoss,"X Size",0,50,1,1,function(v) headSize=Vector3.new(v,headSize.Y,headSize.Z); if headOn then rebuildHead() end end)
+mkSlider(tMoss,"Y Size",0,50,1,1,function(v) headSize=Vector3.new(headSize.X,v,headSize.Z); if headOn then rebuildHead() end end)
+mkSlider(tMoss,"Z Size",0,50,1,1,function(v) headSize=Vector3.new(headSize.X,headSize.Y,v); if headOn then rebuildHead() end end)
+mkSection(tMoss,"Moss Presets")
+for _,pct in ipairs({25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,100}) do
+    mkButton(tMoss,"Moss "..pct.."%",function()
+        local s=pct*0.2; headSize=Vector3.new(s,headSize.Y,s)
+        if headOn then rebuildHead() end; notify("Moss",pct.."%",true)
+    end)
+end
+
+-- ============================================================
+-- ── VOLLEY TAB ─────────────────────────────────────────────
+-- ============================================================
+local vOn=false; local vDist=10; local vConn; local vPart
+
+mkSection(tVolley,"Volley Reach")
+mkParagraph(tVolley,"Info","Only reacts when you are inside the box. Pick your team first then enable.")
+mkButton(tVolley,"🔵 Blue Team",function()
+    vPart=workspace.GKSystem and workspace.GKSystem:FindFirstChild("Fix1")
+    if vPart then vPart.Size=Vector3.new(85,15.48,34.8) end
+    notify("Volley","Blue selected",true)
+end)
+mkButton(tVolley,"🔴 Red Team",function()
+    vPart=workspace.GKSystem and workspace.GKSystem:FindFirstChild("Fix2")
+    if vPart then vPart.Size=Vector3.new(85,15.48,34.8) end
+    notify("Volley","Red selected",true)
+end)
+mkToggle(tVolley,"Enable Volley Reach",nil,false,function(state)
+    vOn=state
+    if vConn then vConn:Disconnect(); vConn=nil end
+    if not state then notify("Volley","OFF",false) return end
+    if not vPart then notify("Volley","Pick team first!",false) return end
+    vConn=RunService.RenderStepped:Connect(function()
+        local c=lplr.Character; local root=c and c:FindFirstChild("HumanoidRootPart")
+        local hum=c and c:FindFirstChildOfClass("Humanoid")
+        if not(root and hum) then return end
+        local mn=vPart.Position-(vPart.Size/2); local mx=vPart.Position+(vPart.Size/2)
+        local p=root.Position
+        if not(p.X>=mn.X and p.X<=mx.X and p.Y>=mn.Y and p.Y<=mx.Y and p.Z>=mn.Z and p.Z<=mx.Z) then return end
+        local TPS=GetTPS(); if not TPS then return end
+        if(root.Position-TPS.Position).Magnitude<=vDist then
+            local limb=GetLimb(c,hum); if limb then firetouchinterest(limb,TPS,0); firetouchinterest(limb,TPS,1) end
+        end
+    end)
+    notify("Volley","ON",true)
+end)
+mkSlider(tVolley,"Volley Distance",0,15,10,1,function(v) vDist=v end)
+
+-- ============================================================
+-- ── REACTS TAB ─────────────────────────────────────────────
+-- ============================================================
+local rcColConn; local rcFollower
+local rcAutoConn; local rcAutoOn=false; local rcAutoDist=6
+local rcTouchConn; local rcPredConn; local rcPredOn=false; local rcPredDist=10
+local rcGKHooked=false; local mobileReactGui
+
+-- Shared cooldown system — one cooldown across ALL react methods
+-- so only ONE react fires per cooldown window, looking legit
+local RC_COOLDOWN = 0.35   -- seconds between reacts (adjustable)
+local rcLastFired  = 0
+local rcBusy       = false  -- prevents double-firing within same window
+
+local function canFireReact()
+    local now = tick()
+    if rcBusy then return false end
+    if (now - rcLastFired) < RC_COOLDOWN then return false end
+    return true
+end
+
+local function doReact(c, hum, TPS)
+    if not canFireReact() then return end
+    local limb = GetLimb(c, hum)
+    if not limb then return end
+    rcBusy = true
+    rcLastFired = tick()
+    firetouchinterest(limb, TPS, 0)
+    firetouchinterest(limb, TPS, 1)
+    -- small random jitter so it never fires at exactly the same interval
+    task.delay(RC_COOLDOWN + math.random(0,8)*0.01, function()
+        rcBusy = false
+    end)
+end
+
+-- ── Ball Collision ─────────────────────────────────────────
+mkSection(tReacts,"Ball Collision")
+mkToggle(tReacts,"Ball Collision","Synced invisible collider on ball",false,function(state)
+    if rcColConn then rcColConn:Disconnect(); rcColConn=nil end
+    if rcFollower then rcFollower:Destroy(); rcFollower=nil end
+    if not state then notify("Ball Collision","OFF",false) return end
+    local TPS=GetTPS(); if not TPS then notify("Reacts","Ball not found",false) return end
+    rcFollower=Instance.new("Part"); rcFollower.Shape=Enum.PartType.Ball
+    rcFollower.Anchored=true; rcFollower.CanCollide=true; rcFollower.Massless=true
+    rcFollower.Transparency=1; rcFollower.Parent=workspace
+    rcColConn=RunService.Heartbeat:Connect(function()
+        local t=GetTPS()
+        if t and rcFollower and rcFollower.Parent then
+            rcFollower.Size=t.Size*1.05; rcFollower.CFrame=t.CFrame
+        end
+    end)
+    notify("Ball Collision","ON",true)
+end)
+
+-- ── Remove Ball Constraints ────────────────────────────────
+mkSection(tReacts,"Ball Delay")
+mkButton(tReacts,"Remove Ball Constraints",function()
+    local TPS=GetTPS(); if not TPS then notify("Reacts","Ball not found",false) return end
+    for _,v in pairs(TPS:GetChildren()) do
+        if v:IsA("Attachment") or v:IsA("BodyVelocity") or v:IsA("BodyForce") or v:IsA("BodyGyro") then
+            pcall(function() v:Destroy() end)
+        end
+    end
+    notify("Ball Delay","Constraints removed",true)
+end)
+
+-- ── React Cooldown Slider ──────────────────────────────────
+mkSection(tReacts,"React Settings")
+mkParagraph(tReacts,"Cooldown","Controls how often reacts fire. Lower = faster reacts. Higher = looks more legit. All react methods share this.")
+mkSlider(tReacts,"React Cooldown (×0.05s)",1,20,7,1,function(v)
+    RC_COOLDOWN = v * 0.05
+end)
+
+-- ── Touch React (fixed — cooldown, no spam) ───────────────
+mkSection(tReacts,"Touch React")
+mkParagraph(tReacts,"Touch React","Fires ONCE when ball touches your character. Cooldown prevents spam & lag. Best overall react for mobile.")
+mkToggle(tReacts,"Enable Touch React","Fires on physical ball contact",false,function(state)
+    if rcTouchConn then rcTouchConn:Disconnect(); rcTouchConn=nil end
+    if not state then notify("Touch React","OFF",false) return end
+    local TPS=GetTPS(); if not TPS then notify("Reacts","Ball not found",false) return end
+    rcTouchConn=TPS.Touched:Connect(function(hit)
+        -- only fire if ball touched OUR character, and only if we can react
+        local c=lplr.Character; if not c then return end
+        if not hit:IsDescendantOf(c) then return end
+        local hum=c:FindFirstChildOfClass("Humanoid"); if not hum then return end
+        local t=GetTPS(); if not t then return end
+        doReact(c, hum, t)
+    end)
+    notify("Touch React","ON",true)
+end)
+
+-- ── Auto React (cooldown, Heartbeat not RenderStepped) ────
+mkSection(tReacts,"Auto React")
+mkParagraph(tReacts,"Auto React","Checks every 0.05s if ball is in range then fires once. Much lighter than before — no lag.")
+mkToggle(tReacts,"Enable Auto React","Fires when ball is within distance",false,function(state)
+    rcAutoOn=state
+    if rcAutoConn then rcAutoConn:Disconnect(); rcAutoConn=nil end
+    if not state then notify("Auto React","OFF",false) return end
+    -- Use task.spawn with a wait loop instead of RenderStepped — much lighter on mobile
+    rcAutoConn = RunService.Heartbeat:Connect(function()
+        if not canFireReact() then return end
+        local c=lplr.Character; local root=c and c:FindFirstChild("HumanoidRootPart")
+        local hum=c and c:FindFirstChildOfClass("Humanoid")
+        if not(c and root and hum) then return end
+        local TPS=GetTPS(); if not TPS then return end
+        local dist=(root.Position-TPS.Position).Magnitude
+        if dist<=rcAutoDist then
+            doReact(c, hum, TPS)
+        end
+    end)
+    notify("Auto React","ON",true)
+end)
+mkSlider(tReacts,"Auto React Distance",2,18,6,1,function(v) rcAutoDist=v end)
+
+-- ── Mobile React Button (fixed — no drag conflict) ────────
+mkSection(tReacts,"Mobile React Button")
+mkParagraph(tReacts,"Tap Button","Big tap button on your screen. Hold and drag to move it. Short tap fires the react.")
+mkToggle(tReacts,"Show React Button","Floating tap button on screen",false,function(state)
+    if mobileReactGui then mobileReactGui:Destroy(); mobileReactGui=nil end
+    if not state then return end
+
+    mobileReactGui=Instance.new("ScreenGui")
+    mobileReactGui.Name="WangReactBtn"; mobileReactGui.ResetOnSpawn=false
+    mobileReactGui.IgnoreGuiInset=true; mobileReactGui.DisplayOrder=998
+    mobileReactGui.Parent=lplr.PlayerGui
+
+    local rb=Instance.new("TextButton")
+    rb.Size=UDim2.new(0,82,0,82)
+    rb.Position=UDim2.new(0,20,0.58,0)
+    rb.BackgroundColor3=ACCENT2
+    rb.Text="⚡\nREACT"
+    rb.TextSize=13; rb.Font=Enum.Font.GothamBold
+    rb.TextColor3=WHITE; rb.BorderSizePixel=0
+    rb.Parent=mobileReactGui
+    mkCorner(rb,41)
+    local rs=Instance.new("UIStroke"); rs.Color=ACCENT; rs.Thickness=2.5; rs.Parent=rb
+
+    -- Drag logic that DOES NOT block taps
+    -- We track if finger moved significantly → drag, else → tap
+    local touchStart=nil; local startPos=nil; local btnStart=nil; local moved=false
+
+    rb.InputBegan:Connect(function(inp)
+        if inp.UserInputType==Enum.UserInputType.Touch then
+            touchStart=inp.Position; btnStart=rb.Position; moved=false
+        end
+    end)
+
+    rb.InputChanged:Connect(function(inp)
+        if inp.UserInputType==Enum.UserInputType.Touch and touchStart then
+            local delta=inp.Position-touchStart
+            if delta.Magnitude>10 then  -- only drag if finger moved >10px
+                moved=true
+                rb.Position=UDim2.new(
+                    btnStart.X.Scale, btnStart.X.Offset+delta.X,
+                    btnStart.Y.Scale, btnStart.Y.Offset+delta.Y
+                )
+            end
+        end
+    end)
+
+    rb.InputEnded:Connect(function(inp)
+        if inp.UserInputType==Enum.UserInputType.Touch then
+            if not moved then
+                -- It was a tap — fire the react
+                local c=lplr.Character; local hum=c and c:FindFirstChildOfClass("Humanoid")
+                local TPS=GetTPS()
+                if c and hum and TPS then
+                    doReact(c, hum, TPS)
+                    TweenService:Create(rb,TweenInfo.new(0.07),{BackgroundColor3=CON}):Play()
+                    task.delay(0.15,function()
+                        TweenService:Create(rb,TweenInfo.new(0.07),{BackgroundColor3=ACCENT2}):Play()
+                    end)
+                end
+            end
+            touchStart=nil; moved=false
+        end
+    end)
+end)
+
+-- ── Prediction React (cooldown, legit timing) ─────────────
+mkSection(tReacts,"Prediction React")
+mkParagraph(tReacts,"Prediction","Predicts where the ball will be and fires react just before it arrives.")
+mkToggle(tReacts,"Enable Prediction React","Pre-fires based on ball velocity",false,function(state)
+    rcPredOn=state
+    if rcPredConn then rcPredConn:Disconnect(); rcPredConn=nil end
+    if not state then notify("Prediction","OFF",false) return end
+    rcPredConn=RunService.Heartbeat:Connect(function()
+        if not canFireReact() then return end
+        local c=lplr.Character; local root=c and c:FindFirstChild("HumanoidRootPart")
+        local hum=c and c:FindFirstChildOfClass("Humanoid")
+        if not(c and root and hum) then return end
+        local TPS=GetTPS(); if not TPS then return end
+        -- predict 4 frames ahead
+        local pred=TPS.Position+(TPS.AssemblyLinearVelocity*(4/60))
+        if(root.Position-pred).Magnitude<=rcPredDist then
+            doReact(c, hum, TPS)
+        end
+    end)
+    notify("Prediction","ON",true)
+end)
+mkSlider(tReacts,"Prediction Distance",2,22,10,1,function(v) rcPredDist=v end)
+
+-- ── GK React ──────────────────────────────────────────────
+mkSection(tReacts,"Goalkeeper React")
+mkParagraph(tReacts,"GK React","Hooks all GK save/tackle/header RemoteEvents. Enable once per session.")
+mkToggle(tReacts,"Enable GK React Hook","Intercepts GK events",false,function(state)
+    if not state then notify("GK React","Reload to unhook",false) return end
+    if rcGKHooked then notify("GK","Already hooked",true) return end
+    rcGKHooked=true
+    local gkA={SaveRA=true,SaveLA=true,SaveRL=true,SaveLL=true,SaveT=true,Tackle=true,Header=true}
+    local meta=getrawmetatable(game); local oldNC=meta.__namecall
+    setreadonly(meta,false)
+    meta.__namecall=newcclosure(function(self,...)
+        local method=getnamecallmethod()
+        if method=="FireServer" then
+            local ok,rn=pcall(function() return self.Name end)
+            if ok and gkA[rn] then
+                local args={...}; local c=lplr.Character; local root=c and c:FindFirstChild("HumanoidRootPart")
+                if root then args[1]=root.CFrame end
+                return oldNC(self,table.unpack(args))
+            end
+        end
+        return oldNC(self,...)
+    end)
+    setreadonly(meta,true)
+    notify("GK React","Hooked!",true)
+end)
+
+-- ============================================================
+-- ── PLAYER TAB ─────────────────────────────────────────────
+-- ============================================================
+local wsOn=false; local wsVal=23; local jpOn=false; local jpVal=50
+
+mkSection(tPlayer,"Walkspeed")
+mkToggle(tPlayer,"Enable Walkspeed",nil,false,function(v)
+    wsOn=v; local h=lplr.Character and lplr.Character:FindFirstChildOfClass("Humanoid")
+    if h then h.WalkSpeed=v and wsVal or 23 end; notify("Walkspeed",v and "ON" or "Reset",v)
+end)
+mkSlider(tPlayer,"Walkspeed",23,75,23,1,function(v)
+    wsVal=v; if wsOn then
+        local h=lplr.Character and lplr.Character:FindFirstChildOfClass("Humanoid")
+        if h then h.WalkSpeed=v end
+    end
+end)
+mkButton(tPlayer,"Reset Walkspeed",function()
+    local h=lplr.Character and lplr.Character:FindFirstChildOfClass("Humanoid")
+    if h then h.WalkSpeed=23 end; notify("Walkspeed","Reset to 23",true)
+end)
+
+mkSection(tPlayer,"Jump Power")
+mkToggle(tPlayer,"Enable Jump Power",nil,false,function(v)
+    jpOn=v; local h=lplr.Character and lplr.Character:FindFirstChildOfClass("Humanoid")
+    if h then h.JumpPower=v and jpVal or 50 end; notify("Jump",v and "ON" or "Reset",v)
+end)
+mkSlider(tPlayer,"Jump Power",50,120,50,1,function(v)
+    jpVal=v; if jpOn then
+        local h=lplr.Character and lplr.Character:FindFirstChildOfClass("Humanoid")
+        if h then h.JumpPower=v end
+    end
+end)
+mkButton(tPlayer,"Reset Jump Power",function()
+    local h=lplr.Character and lplr.Character:FindFirstChildOfClass("Humanoid")
+    if h then h.JumpPower=50 end; notify("Jump","Reset to 50",true)
+end)
+
+mkSection(tPlayer,"Avatar Steal")
+local disguiseOn=false; local disguiseUser=""; local disguiseDesc=nil
+mkInput(tPlayer,"Target Username","Enter username...",function(v) disguiseUser=v end)
+mkToggle(tPlayer,"Enable Avatar Steal","Copies another player's appearance",false,function(state)
+    disguiseOn=state
+    if state and disguiseUser~="" and lplr.Character then
+        task.spawn(function()
+            pcall(function()
+                local id=Players:GetUserIdFromNameAsync(disguiseUser)
+                disguiseDesc=Players:GetHumanoidDescriptionFromUserId(id)
+                local hum=lplr.Character:WaitForChild("Humanoid")
+                hum:ApplyDescriptionClientServer(disguiseDesc)
+            end)
+        end)
+        notify("Avatar Steal","Applied!",true)
+    elseif not state and lplr.Character then
+        local hum=lplr.Character:FindFirstChildOfClass("Humanoid")
+        if hum then pcall(function() hum:ApplyDescriptionClientServer(Players:GetHumanoidDescriptionAsync(lplr.UserId)) end) end
+        notify("Avatar Steal","Reverted",false)
     end
 end)
 
-print("[AFC FITAS] Mobile hub loaded! Reach + React Strength + Minimize ready.")
+-- ============================================================
+-- ── PERFORMANCE TAB ────────────────────────────────────────
+-- ============================================================
+mkSection(tPerf,"Network")
+mkInput(tPerf,"Clumsy (0.01–0.10)","e.g. 0.05",function(v)
+    local n=tonumber(v); if not n then return end
+    settings():GetService("NetworkSettings").IncomingReplicationLag=n
+    notify("Clumsy","Set to "..v,true)
+end)
+mkSection(tPerf,"FPS")
+mkButton(tPerf,"Unlock FPS",function() setfpscap(10000); notify("FPS","Uncapped!",true) end)
+mkButton(tPerf,"FPS Boost",function()
+    local t=workspace.Terrain
+    t.WaterWaveSize=0; t.WaterWaveSpeed=0; t.WaterReflectance=0; t.WaterTransparency=0
+    Lighting.GlobalShadows=false; Lighting.FogEnd=9e9; Lighting.Brightness=0
+    settings().Rendering.QualityLevel="Level01"
+    local TPS=GetTPS()
+    local char=lplr.Character
+    for _,d in pairs(game:GetDescendants()) do
+        -- skip the ball entirely so textures/decals stay intact
+        if TPS and (d==TPS or d:IsDescendantOf(TPS)) then continue end
+        -- skip player character so skin/clothes stay intact
+        if char and d:IsDescendantOf(char) then continue end
+        if d:IsA("BasePart") or d:IsA("MeshPart") then
+            d.Material="SmoothPlastic"; d.Reflectance=0; d.CastShadow=false
+        elseif d:IsA("Decal") then
+            d.Transparency=1
+        elseif d:IsA("ParticleEmitter") or d:IsA("Trail") then
+            d.Lifetime=NumberRange.new(0)
+        elseif d:IsA("Fire") or d:IsA("SpotLight") or d:IsA("Smoke") then
+            d.Enabled=false
+        end
+    end
+    for _,e in pairs(Lighting:GetChildren()) do
+        if e:IsA("PostEffect") or e:IsA("DepthOfFieldEffect") then e.Enabled=false end
+    end
+    notify("FPS Boost","Applied! Ball & player kept",true)
+end)
+mkButton(tPerf,"Show FPS Counter",function()
+    local sg=Instance.new("ScreenGui"); sg.ResetOnSpawn=false; sg.IgnoreGuiInset=true; sg.Parent=lplr.PlayerGui
+    local f=Instance.new("Frame"); f.Size=UDim2.new(0,76,0,52); f.Position=UDim2.new(0,10,0,100)
+    f.BackgroundColor3=Color3.fromRGB(20,20,20); f.Active=true; f.Parent=sg; mkCorner(f,6); mkDrag(f)
+    local fl=Instance.new("TextLabel"); fl.Size=UDim2.new(1,0,1,0); fl.BackgroundTransparency=1
+    fl.Font=Enum.Font.SourceSansBold; fl.TextSize=30; fl.TextColor3=CON; fl.Parent=f
+    local lt,fr=tick(),0
+    RunService.RenderStepped:Connect(function()
+        fr+=1; local now=tick()
+        if now-lt>=1 then
+            local fps=math.floor(fr/(now-lt)); fl.Text=tostring(fps)
+            fl.TextColor3=fps>=60 and CON or fps>=30 and Color3.fromRGB(255,170,0) or COFF
+            lt=now; fr=0
+        end
+    end)
+    notify("FPS","Counter added",true)
+end)
+mkButton(tPerf,"Fake Ping 20-30ms",function()
+    local CG=game:GetService("CoreGui")
+    local PS=CG:WaitForChild("RobloxGui"):WaitForChild("PerformanceStats")
+    local vl; for _,b in ipairs(PS:GetChildren()) do
+        if b.Name=="PS_Button" then
+            local pn=b:FindFirstChild("StatsMiniTextPanelClass")
+            if pn then local ti=pn:FindFirstChild("TitleLabel"); local va=pn:FindFirstChild("ValueLabel")
+                if ti and va and ti.Text=="NetworkPing" then vl=va; break end end
+        end
+    end
+    if not vl then notify("Ping","Label not found",false) return end
+    local fp=math.random(20,25); local ti2=0
+    RunService.RenderStepped:Connect(function(dt)
+        ti2+=dt; if ti2>=0.7 then ti2=0; fp=math.clamp(fp+math.random(-1,1),18,30) end
+        vl.Text=string.format("%d.%02d ms",fp,math.random(0,99))
+    end)
+    notify("Ping","Faking 20-30ms",true)
+end)
+
+-- ============================================================
+-- ── HELPERS TAB ────────────────────────────────────────────
+-- ============================================================
+mkSection(tHelpers,"ZZZZ Helper")
+mkToggle(tHelpers,"Enable ZZZZ Helper","Invisible platform that follows the ball",false,function(state)
+    for _,c in ipairs(workspace:GetChildren()) do if c.Name=="WangZZZZ" then c:Destroy() end end
+    if not state then return end
+    local p=Instance.new("Part"); p.Name="WangZZZZ"; p.Size=Vector3.new(9,0.1,9)
+    p.Anchored=true; p.Transparency=1; p.Parent=workspace
+    RunService.RenderStepped:Connect(function() local t=GetTPS(); if t and p.Parent then p.Position=t.Position-Vector3.new(0,1,0) end end)
+    notify("ZZZZ","ON",true)
+end)
+
+mkSection(tHelpers,"Air Dribble Helper")
+mkSlider(tHelpers,"Air Dribble Size",1,15,1,1,function(v)
+    for _,c in ipairs(workspace:GetChildren()) do if c.Name=="WangAD" then c:Destroy() end end
+    local p=Instance.new("Part"); p.Name="WangAD"; p.Size=Vector3.new(v,0.1,v)
+    p.Anchored=true; p.Transparency=1; p.Parent=workspace
+    RunService.RenderStepped:Connect(function() local t=GetTPS(); if t and p.Parent then p.Position=t.Position-Vector3.new(0,1,0) end end)
+end)
+
+mkSection(tHelpers,"Inf Dribble (Mobile)")
+local followBall=false; local infGui2
+mkToggle(tHelpers,"Enable Inf Dribble","On-screen button to toggle ball-follow",false,function(v)
+    if infGui2 then infGui2:Destroy(); infGui2=nil end; followBall=false
+    if not v then return end
+    infGui2=Instance.new("ScreenGui"); infGui2.Name="WangInfDrib"
+    infGui2.ResetOnSpawn=false; infGui2.IgnoreGuiInset=true; infGui2.Parent=lplr.PlayerGui
+    local tb=Instance.new("TextButton"); tb.Size=UDim2.new(0,110,0,38)
+    tb.Position=UDim2.new(0,16,0.45,0); tb.Text="Inf Dribble: OFF"
+    tb.BackgroundColor3=ELEM; tb.TextColor3=TXT; tb.TextScaled=true
+    tb.BorderSizePixel=0; tb.Parent=infGui2; mkCorner(tb,8); mkDrag(tb)
+    tb.MouseButton1Click:Connect(function()
+        followBall=not followBall
+        tb.Text=followBall and "Inf Dribble: ON" or "Inf Dribble: OFF"
+        tb.BackgroundColor3=followBall and CON or ELEM
+    end)
+    RunService.RenderStepped:Connect(function()
+        if followBall then
+            local c=lplr.Character; local hum=c and c:FindFirstChildOfClass("Humanoid"); local TPS=GetTPS()
+            if hum and TPS then hum:MoveTo(TPS.Position) end
+        end
+    end)
+end)
+
+-- ============================================================
+-- ── BALL TAB ───────────────────────────────────────────────
+-- ============================================================
+mkSection(tBall,"Ball Modifications")
+mkInput(tBall,"Ball Size","e.g. 2.6",function(v)
+    local n=tonumber(v); if not n then return end
+    local TPS=GetTPS(); if TPS then TPS.Size=Vector3.new(n,n,n); notify("Ball","Size → "..v,true) end
+end)
+mkButton(tBall,"Anti-Ball Fling",function()
+    RunService.Stepped:Connect(function()
+        local c=lplr.Character; if not c then return end
+        for _,p in pairs(c:GetDescendants()) do
+            if p:IsA("BasePart") and p.CanCollide and
+              (p.Name=="Right Leg" or p.Name=="Right Arm" or p.Name=="Left Arm" or p.Name=="Torso") then
+                p.CanCollide=false
+            end
+        end
+    end)
+    notify("Anti Fling","ON",true)
+end)
+
+mkSection(tBall,"Ball Prediction Trail")
+local predConn2; local predParts2={}; local lineParts2={}
+mkToggle(tBall,"Show Prediction Trail","Draws ball trajectory line",false,function(state)
+    if predConn2 then predConn2:Disconnect(); predConn2=nil end
+    for _,p in pairs(predParts2) do if p and p.Parent then p.Transparency=1 end end
+    for _,p in pairs(lineParts2) do if p and p.Parent then p.Transparency=1 end end
+    if not state then return end
+    local g=workspace.Gravity or 196.2
+    predConn2=RunService.Heartbeat:Connect(function()
+        local TPS=GetTPS(); if not TPS then return end
+        local sp,sv=TPS.Position,TPS.Velocity
+        for i=1,10 do
+            local t2=i*0.05; local pp=sp+sv*t2+Vector3.new(0,-0.5*g*t2*t2,0)
+            if not predParts2[i] then
+                local d=Instance.new("Part"); d.Anchored=true; d.CanCollide=false
+                d.Size=Vector3.new(0.3,0.3,0.3); d.Material=Enum.Material.Neon
+                d.Color=ACCENT; d.CastShadow=false; d.Parent=workspace; predParts2[i]=d
+            end
+            predParts2[i].CFrame=CFrame.new(pp); predParts2[i].Transparency=0.4
+        end
+    end)
+    notify("Prediction","Trail ON",true)
+end)
+
+mkSection(tBall,"Ball Texture")
+mkDropdown(tBall,"Texture",{"Default","Adidas Brazuca","Adidas Jabulani"},function(v)
+    local TPS=GetTPS(); if not TPS then return end
+    local tex={
+        Default={d1="1731401359",d2="1731401359",d3="1731401811",d4="1731401811",d5="1731401359",d6="1731401359"},
+        ["Adidas Brazuca"]={d1="137668136",d2="137668129",d3="137668136",d4="137668136",d5="137668136",d6="137668136"},
+        ["Adidas Jabulani"]={d1="76614961",d2="76614961",d3="76614961",d4="76614961",d5="76614961",d6="76614961"},
+    }
+    local t2=tex[v]; if not t2 then return end
+    for i=1,6 do local d=TPS:FindFirstChild("Decal"..i); if d then d.Texture="rbxassetid://"..t2["d"..i] end end
+    notify("Texture",v,true)
+end)
+
+mkSection(tBall,"Ball Sound")
+mkDropdown(tBall,"Sound",{"Default","OOF !","Neverloose","Rust","Bruh"},function(v)
+    local TPS=GetTPS(); if not TPS then return end
+    local snd=TPS:FindFirstChild("Sound"); if not snd then return end
+    local sids={Default="2516069845",["OOF !"]="5143383166",Neverloose="6607204501",Rust="1255040462",Bruh="4275842574"}
+    snd.SoundId="rbxassetid://"..sids[v]
+    snd.PlaybackSpeed=v=="OOF !" and 1 or 0.7; snd.Volume=v=="OOF !" and 2 or 0.7
+    notify("Sound",v,true)
+end)
+
+-- ============================================================
+-- ── GAMEPASS TAB ───────────────────────────────────────────
+-- ============================================================
+local acLoop,atLoop
+mkSection(tGP,"Free Gamepasses")
+mkToggle(tGP,"More Curve",nil,false,function(state)
+    if acLoop then acLoop:Disconnect(); acLoop=nil end
+    pcall(function()
+        lplr.PlayerGui.Start.GamePassMenu.Items.WoodenFloor.Tick.Visible=state
+    end)
+    if state then
+        local hum=lplr.Character:WaitForChild("Humanoid")
+        acLoop=hum.AnimationPlayed:Connect(function(tr)
+            local names={"OldMKickL","OldMKick","OldLKickL","OldLKick","MKickL","MKick","LKickL","LKick","OldDribbleL","OldDribble","DribbleL","Dribble"}
+            if table.find(names,tr.Name) then
+                if(lplr.Character.HumanoidRootPart.Position-workspace.TPSSystem.TPS.Position).Magnitude<3.45 then
+                    local ev=workspace.FE.Actions.KickC1
+                    local A1,A2=workspace.TPSSystem.TPS,lplr.Character.HumanoidRootPart
+                    ev:FireServer(A1,A2); task.wait(0.2); ev:FireServer(A1,A2)
+                end
+            end
+        end)
+    end
+    notify("More Curve",state and "ON" or "OFF",state)
+end)
+mkToggle(tGP,"Blue Flame",nil,false,function(state)
+    if not state then return end
+    pcall(function()
+        local s=lplr.PlayerGui:WaitForChild("Start")
+        s.PowerShot.Flame.Image="rbxassetid://15316155280"
+        s.PowerShot.Flame.Flame.Image="rbxassetid://15316155280"
+        lplr.Backpack.FValue.Value=2
+        s.GamePassMenu.Items.BlueFlame.Tick.Visible=true
+    end)
+    notify("Blue Flame","ON",true)
+end)
+mkToggle(tGP,"Unlock Cooldown",nil,false,function(state)
+    if not state then return end
+    pcall(function()
+        local s=lplr.PlayerGui:WaitForChild("Start")
+        s.PowerShot.PowerValue.Value=30
+        s.GamePassMenu.Items.Cooldown.Tick.Visible=true
+    end)
+    notify("Cooldown","Unlocked",true)
+end)
+mkToggle(tGP,"Powerful Tackle",nil,false,function(state)
+    if atLoop then atLoop:Disconnect(); atLoop=nil end
+    pcall(function()
+        lplr.Backpack.TackleGamePass.Value=state
+        lplr.PlayerGui.Start.GamePassMenu.Items.RandomWeather.Tick.Visible=state
+    end)
+    if state then
+        local hum=lplr.Character:WaitForChild("Humanoid")
+        atLoop=hum.AnimationPlayed:Connect(function(tr)
+            if tr.Name:match("Tackle") then
+                if(lplr.Character.HumanoidRootPart.Position-workspace.TPSSystem.TPS.Position).Magnitude<4.87 then
+                    task.wait(0.8)
+                    workspace.FE.Actions.KickG1:FireServer(workspace.TPSSystem.TPS,lplr.Character.HumanoidRootPart,30,Vector3.new(4000000,700,4000000))
+                end
+            end
+        end)
+    end
+    notify("Powerful Tackle",state and "ON" or "OFF",state)
+end)
+
+-- ============================================================
+-- ── TELEPORT TAB ───────────────────────────────────────────
+-- ============================================================
+local tpTgt; local tpLoopConn
+mkSection(tTP,"Teleport")
+mkInput(tTP,"Target Username","Player name...",function(v)
+    tpTgt=Players:FindFirstChild(v)
+    notify("Target",tpTgt and "Found: "..v or "Not found",tpTgt~=nil)
+end)
+mkButton(tTP,"Teleport to Player",function()
+    local c=lplr.Character
+    if tpTgt and c and tpTgt.Character and c:FindFirstChild("HumanoidRootPart") and tpTgt.Character:FindFirstChild("HumanoidRootPart") then
+        c.HumanoidRootPart.CFrame=tpTgt.Character.HumanoidRootPart.CFrame; notify("TP","Done!",true)
+    end
+end)
+mkButton(tTP,"Teleport Above Player",function()
+    local c=lplr.Character
+    if tpTgt and c and tpTgt.Character and c:FindFirstChild("HumanoidRootPart") and tpTgt.Character:FindFirstChild("HumanoidRootPart") then
+        c.HumanoidRootPart.CFrame=tpTgt.Character.HumanoidRootPart.CFrame+Vector3.new(0,10,0); notify("TP","Above!",true)
+    end
+end)
+mkButton(tTP,"Teleport to Closest Player",function()
+    local c=lplr.Character; if not c then return end
+    local hrp=c:FindFirstChild("HumanoidRootPart"); if not hrp then return end
+    local best,bd=nil,math.huge
+    for _,p in ipairs(Players:GetPlayers()) do
+        if p~=lplr and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+            local d=(hrp.Position-p.Character.HumanoidRootPart.Position).Magnitude
+            if d<bd then bd=d; best=p end
+        end
+    end
+    if best then hrp.CFrame=best.Character.HumanoidRootPart.CFrame+Vector3.new(0,3,0); notify("TP",best.Name,true)
+    else notify("TP","No players",false) end
+end)
+mkButton(tTP,"Teleport to Random Player",function()
+    local others={}
+    for _,p in ipairs(Players:GetPlayers()) do
+        if p~=lplr and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then table.insert(others,p) end
+    end
+    if #others>0 then
+        local t2=others[math.random(#others)]
+        lplr.Character.HumanoidRootPart.CFrame=t2.Character.HumanoidRootPart.CFrame+Vector3.new(0,3,0)
+        notify("TP",t2.Name,true)
+    else notify("TP","No players",false) end
+end)
+mkToggle(tTP,"Loop TP to Ball","Constantly follows the ball",false,function(state)
+    if tpLoopConn then tpLoopConn:Disconnect(); tpLoopConn=nil end
+    if not state then notify("TP Ball","OFF",false) return end
+    tpLoopConn=RunService.Heartbeat:Connect(function()
+        local c=lplr.Character; local hrp=c and c:FindFirstChild("HumanoidRootPart"); local TPS=GetTPS()
+        if hrp and TPS then hrp.CFrame=TPS.CFrame+(-TPS.CFrame.LookVector*5+Vector3.new(0,3,0)) end
+    end)
+    notify("TP Ball","ON",true)
+end)
+mkSection(tTP,"Goal Teleports")
+mkButton(tTP,"Teleport to Red Goal",function()
+    local c=lplr.Character or lplr.CharacterAdded:Wait()
+    local hrp=c:WaitForChild("HumanoidRootPart")
+    local rg=workspace:FindFirstChild("RedGoal")
+    if rg and rg:FindFirstChild("Part") then hrp.CFrame=rg.Part.CFrame+Vector3.new(0,3,0); notify("TP","Red Goal",true)
+    else notify("TP","RedGoal not found",false) end
+end)
+mkButton(tTP,"Teleport to Blue Goal",function()
+    local c=lplr.Character or lplr.CharacterAdded:Wait()
+    local hrp=c:WaitForChild("HumanoidRootPart")
+    local bg=workspace:FindFirstChild("BlueGoal")
+    if bg and bg:FindFirstChild("Part") then hrp.CFrame=bg.Part.CFrame+Vector3.new(0,3,0); notify("TP","Blue Goal",true)
+    else notify("TP","BlueGoal not found",false) end
+end)
+
+-- ============================================================
+-- ── SKY TAB ────────────────────────────────────────────────
+-- ============================================================
+local function SetSky(data,stars)
+    local ex=Lighting:FindFirstChildOfClass("Sky"); if ex then ex:Destroy() end
+    local sky=Instance.new("Sky")
+    sky.SkyboxBk=data.Bk; sky.SkyboxDn=data.Dn; sky.SkyboxFt=data.Ft
+    sky.SkyboxLf=data.Lf; sky.SkyboxRt=data.Rt; sky.SkyboxUp=data.Up
+    sky.StarCount=stars or 3000; sky.Parent=Lighting
+end
+
+local function sk(id) return "http://www.roblox.com/asset/?id="..id end
+
+mkSection(tSky,"Sky Presets")
+local skyList={
+    {"Night Sky",     {Bk=sk"12064107",Dn=sk"12064152",Ft=sk"12064121",Lf=sk"12063984",Rt=sk"12064115",Up=sk"12064131"},0},
+    {"Scary Night",   {Bk=sk"48020371",Dn=sk"48020144",Ft=sk"48020234",Lf=sk"48020211",Rt=sk"48020254",Up=sk"48020383"},3000},
+    {"Sakura Sky",    {Bk=sk"271042516",Dn=sk"271077243",Ft=sk"271042556",Lf=sk"271042310",Rt=sk"271042467",Up=sk"271077958"},1334},
+    {"Galaxy Planets",{Bk=sk"15983968922",Dn=sk"15983966825",Ft=sk"15983965025",Lf=sk"15983967420",Rt=sk"15983966246",Up=sk"15983964246"},3000},
+    {"Purple Night",  {Bk=sk"5084575798",Dn=sk"5084575916",Ft=sk"5103949679",Lf=sk"5103948542",Rt=sk"5103948784",Up=sk"5084576400"},3000},
+    {"Sunset Orange", {Bk=sk"458016711",Dn=sk"458016826",Ft=sk"458016532",Lf=sk"458016655",Rt=sk"458016782",Up=sk"458016792"},3000},
+    {"Purple Sky",    {Bk=sk"570557514",Dn=sk"570557775",Ft=sk"570557559",Lf=sk"570557620",Rt=sk"570557672",Up=sk"570557727"},3000},
+    {"Gray Sky",      {Bk=sk"18703245834",Dn=sk"18703243349",Ft=sk"18703240532",Lf=sk"18703237556",Rt=sk"18703235430",Up=sk"18703232671"},3500},
+    {"Mountain Sky",  {Bk=sk"160188495",Dn=sk"160188614",Ft=sk"160188609",Lf=sk"160188589",Rt=sk"160188597",Up=sk"160188588"},3000},
+    {"Pinkie Preppy", {Bk=sk"11555017034",Dn=sk"11555013415",Ft=sk"11555010145",Lf=sk"11555006545",Rt=sk"11555000712",Up=sk"11554996247"},3000},
+    {"Mountain Sky 2",{Bk=sk"368385273",Dn=sk"48015300",Ft=sk"368388290",Lf=sk"368390615",Rt=sk"368385190",Up=sk"48015387"},3000},
+    {"Sunset Mountain",{Bk=sk"17901353811",Dn=sk"17901366771",Ft=sk"17901356262",Lf=sk"17901359687",Rt=sk"17901362326",Up=sk"17901365106"},3000},
+}
+for _,sd in ipairs(skyList) do
+    local name,data,stars=sd[1],sd[2],sd[3]
+    mkButton(tSky,name,function() SetSky(data,stars); notify("Sky",name,true) end)
+end
+
+-- ============================================================
+-- ── SETTINGS TAB ───────────────────────────────────────────
+-- ============================================================
+mkSection(tSettings,"About")
+mkParagraph(tSettings,"Wang Script","Private | TPS Street Soccer\nBuilt for iPhone + Delta executor.\n\nDrag title bar to move UI.\n✕ to hide → tap ⚽ ball to reopen.")
+mkSection(tSettings,"Window Size")
+mkSlider(tSettings,"Width",260,420,340,10,function(v)
+    Win.Size=UDim2.new(0,v,0,Win.AbsoluteSize.Y)
+end)
+mkSlider(tSettings,"Height",360,650,500,10,function(v)
+    Win.Size=UDim2.new(0,Win.AbsoluteSize.X,0,v)
+end)
+mkSection(tSettings,"Transparency")
+mkSlider(tSettings,"UI Opacity",0,90,0,5,function(v)
+    Win.BackgroundTransparency=v/100
+end)
+
+-- ============================================================
+-- ── AUTO TAB  (everything runs itself — no mid-game pressing)
+-- ============================================================
+local tAuto = mkTab("Auto", "🤖")
+
+-- ── 1. Animation React ──────────────────────────────────────
+-- Hooks Humanoid.AnimationPlayed and fires react in sync with
+-- the actual kick/dribble animation so it fires at the exact
+-- natural moment your foot would hit the ball.
+mkSection(tAuto, "Animation React")
+mkParagraph(tAuto, "How it works",
+    "Fires react when your kick or dribble animation plays AND the ball is close. Looks completely legit because it syncs with your real animation.")
+
+local animReactOn   = false
+local animReactConn = nil
+local ANIM_NAMES = {
+    "OldMKickL","OldMKick","OldLKickL","OldLKick",
+    "MKickL","MKick","LKickL","LKick",
+    "OldDribbleL","OldDribble","DribbleL","Dribble",
+    "Header","Volley","VolleyL",
+}
+local ANIM_DIST = 4.5  -- only fire if ball is within this distance when anim plays
+
+local function hookAnimReact()
+    if animReactConn then animReactConn:Disconnect(); animReactConn=nil end
+    if not animReactOn then return end
+    local char = lplr.Character; if not char then return end
+    local hum  = char:FindFirstChildOfClass("Humanoid"); if not hum then return end
+    animReactConn = hum.AnimationPlayed:Connect(function(track)
+        if not table.find(ANIM_NAMES, track.Name) then return end
+        local TPS  = GetTPS(); if not TPS then return end
+        local root = char:FindFirstChild("HumanoidRootPart"); if not root then return end
+        local dist = (root.Position - TPS.Position).Magnitude
+        if dist > ANIM_DIST then return end
+        local limb = GetLimb(char, hum); if not limb then return end
+        -- small natural delay — waits for the swing frame
+        task.delay(0.06 + math.random(0,4)*0.01, function()
+            if not (limb.Parent and TPS.Parent) then return end
+            firetouchinterest(limb, TPS, 0)
+            firetouchinterest(limb, TPS, 1)
+        end)
+    end)
+end
+
+-- re-hook on respawn
+lplr.CharacterAdded:Connect(function()
+    task.wait(0.5)
+    if animReactOn then hookAnimReact() end
+end)
+
+mkToggle(tAuto, "Animation React", "Fires react in sync with kick/dribble anims", false, function(v)
+    animReactOn = v
+    if v then hookAnimReact() else
+        if animReactConn then animReactConn:Disconnect(); animReactConn=nil end
+    end
+    notify("Anim React", v and "ON" or "OFF", v)
+end)
+mkSlider(tAuto, "Anim React Distance", 2, 8, 4, 1, function(v)
+    ANIM_DIST = v + 0.5
+end)
+
+-- ── 2. Smart React ──────────────────────────────────────────
+-- Only fires when the ball is actually moving TOWARDS you,
+-- not when it's rolling away. Prevents false reacts.
+mkSection(tAuto, "Smart React")
+mkParagraph(tAuto, "How it works",
+    "Checks ball velocity direction. Only fires if the ball is coming toward you. Prevents wasted reacts on balls moving away.")
+
+local smartOn   = false
+local smartConn = nil
+local smartDist = 7
+local smartLastPos = nil
+
+mkToggle(tAuto, "Smart React", "Only reacts when ball is heading toward you", false, function(state)
+    smartOn = state
+    if smartConn then smartConn:Disconnect(); smartConn=nil end
+    if not state then notify("Smart React","OFF",false) return end
+    smartConn = RunService.Heartbeat:Connect(function()
+        if not canFireReact() then return end
+        local c    = lplr.Character
+        local root = c and c:FindFirstChild("HumanoidRootPart")
+        local hum  = c and c:FindFirstChildOfClass("Humanoid")
+        if not (c and root and hum) then return end
+        local TPS = GetTPS(); if not TPS then return end
+        local dist = (root.Position - TPS.Position).Magnitude
+        if dist > smartDist then smartLastPos=nil; return end
+        -- check if ball is moving toward player using dot product
+        local toPlayer = (root.Position - TPS.Position).Unit
+        local ballVel  = TPS.AssemblyLinearVelocity
+        if ballVel.Magnitude < 0.5 then return end  -- ball barely moving, skip
+        local dot = toPlayer:Dot(ballVel.Unit)
+        if dot > 0.3 then  -- ball is heading toward player (positive dot = same direction)
+            doReact(c, hum, TPS)
+        end
+    end)
+    notify("Smart React","ON",true)
+end)
+mkSlider(tAuto, "Smart React Distance", 3, 15, 7, 1, function(v) smartDist=v end)
+
+-- ── 3. Auto Dribble ─────────────────────────────────────────
+-- Fires dribble RemoteEvent automatically when ball is close.
+-- Completely hands-free dribbling.
+mkSection(tAuto, "Auto Dribble")
+mkParagraph(tAuto, "How it works",
+    "Automatically fires the dribble remote when ball is near your feet. You just run, it dribbles for you.")
+
+local autoDribOn   = false
+local autoDribConn = nil
+local autoDribDist = 3.5
+local autoDribCooldown = 0.18
+local autoDribLast = 0
+
+mkToggle(tAuto, "Auto Dribble", "Dribbles automatically when ball is near", false, function(state)
+    autoDribOn = state
+    if autoDribConn then autoDribConn:Disconnect(); autoDribConn=nil end
+    if not state then notify("Auto Dribble","OFF",false) return end
+    autoDribConn = RunService.Heartbeat:Connect(function()
+        local now = tick()
+        if (now - autoDribLast) < autoDribCooldown then return end
+        local c    = lplr.Character
+        local root = c and c:FindFirstChild("HumanoidRootPart")
+        local hum  = c and c:FindFirstChildOfClass("Humanoid")
+        if not (c and root and hum) then return end
+        local TPS = GetTPS(); if not TPS then return end
+        if (root.Position - TPS.Position).Magnitude > autoDribDist then return end
+        autoDribLast = now
+        -- fire dribble remotes
+        local actions = workspace:FindFirstChild("FE") and workspace.FE:FindFirstChild("Actions")
+        if not actions then return end
+        local dribbleNames = {"Dribble","DribbleL"}
+        for _, name in ipairs(dribbleNames) do
+            local ev = actions:FindFirstChild(name)
+            if ev then
+                pcall(function()
+                    ev:FireServer(TPS, root)
+                end)
+            end
+        end
+    end)
+    notify("Auto Dribble","ON",true)
+end)
+mkSlider(tAuto, "Auto Dribble Distance", 2, 6, 3, 1, function(v) autoDribDist=v+0.5 end)
+mkSlider(tAuto, "Dribble Speed (×0.01s)", 10, 40, 18, 1, function(v) autoDribCooldown=v*0.01 end)
+
+-- ── 4. Auto Tackle ──────────────────────────────────────────
+-- Detects nearest opponent with the ball and fires tackle remote.
+mkSection(tAuto, "Auto Tackle")
+mkParagraph(tAuto, "How it works",
+    "Automatically fires tackle when an opponent is close to you and has the ball. Enable it and just run at people.")
+
+local autoTackleOn   = false
+local autoTackleConn = nil
+local autoTackleDist = 5
+local autoTackleLast = 0
+local autoTackleCooldown = 1.2  -- tackle has a real cooldown in-game
+
+mkToggle(tAuto, "Auto Tackle", "Auto tackles opponents near the ball", false, function(state)
+    autoTackleOn = state
+    if autoTackleConn then autoTackleConn:Disconnect(); autoTackleConn=nil end
+    if not state then notify("Auto Tackle","OFF",false) return end
+    autoTackleConn = RunService.Heartbeat:Connect(function()
+        local now = tick()
+        if (now - autoTackleLast) < autoTackleCooldown then return end
+        local c    = lplr.Character
+        local root = c and c:FindFirstChild("HumanoidRootPart")
+        if not (c and root) then return end
+        local TPS = GetTPS(); if not TPS then return end
+        -- find closest opponent near the ball
+        local closest, closestDist = nil, autoTackleDist
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p == lplr then continue end
+            local pc = p.Character
+            local pr = pc and pc:FindFirstChild("HumanoidRootPart")
+            if not pr then continue end
+            -- check opponent is close to ball AND close to us
+            local oppToBall = (pr.Position - TPS.Position).Magnitude
+            local oppToMe   = (root.Position - pr.Position).Magnitude
+            if oppToBall < 4 and oppToMe < closestDist then
+                closestDist = oppToMe
+                closest = pc
+            end
+        end
+        if not closest then return end
+        autoTackleLast = now
+        local actions = workspace:FindFirstChild("FE") and workspace.FE:FindFirstChild("Actions")
+        if not actions then return end
+        local ev = actions:FindFirstChild("Tackle")
+        if ev then pcall(function() ev:FireServer(TPS, root) end) end
+    end)
+    notify("Auto Tackle","ON",true)
+end)
+mkSlider(tAuto, "Tackle Range", 3, 10, 5, 1, function(v) autoTackleDist=v end)
+
+-- ── 5. Auto Anti-AFK ────────────────────────────────────────
+mkSection(tAuto, "Anti-AFK")
+mkParagraph(tAuto, "Anti-AFK",
+    "Randomly moves your character every 2 minutes so you never get kicked for being idle.")
+
+local antiAfkOn   = false
+local antiAfkTask = nil
+
+mkToggle(tAuto, "Anti-AFK", "Prevents idle kick automatically", false, function(state)
+    antiAfkOn = state
+    if antiAfkTask then task.cancel(antiAfkTask); antiAfkTask=nil end
+    if not state then notify("Anti-AFK","OFF",false) return end
+    antiAfkTask = task.spawn(function()
+        while antiAfkOn do
+            task.wait(110 + math.random(0,20))  -- every ~2 min with jitter
+            if not antiAfkOn then break end
+            local c   = lplr.Character
+            local hum = c and c:FindFirstChildOfClass("Humanoid")
+            local root= c and c:FindFirstChild("HumanoidRootPart")
+            if hum and root then
+                -- tiny nudge that's basically invisible
+                local offset = Vector3.new(math.random(-1,1)*0.3, 0, math.random(-1,1)*0.3)
+                hum:MoveTo(root.Position + offset)
+            end
+        end
+    end)
+    notify("Anti-AFK","ON — auto",true)
+end)
+
+-- ── 6. Auto Leg Reset on Respawn ────────────────────────────
+-- If you're using leg size reach, this auto-reapplies it
+-- after you respawn so you don't have to manually re-enter the size.
+mkSection(tAuto, "Auto Respawn Fix")
+mkParagraph(tAuto, "Auto Respawn Fix",
+    "Remembers your reach/leg settings and automatically reapplies them when you respawn. No need to re-enter anything.")
+
+local autoRespawnOn  = false
+local savedLegSize   = 3
+local savedRigType   = nil
+
+mkToggle(tAuto, "Auto Respawn Fix", "Reapplies leg size after every respawn", false, function(state)
+    autoRespawnOn = state
+    notify("Respawn Fix", state and "ON" or "OFF", state)
+end)
+mkSlider(tAuto, "Saved Leg Size", 1, 10, 3, 1, function(v) savedLegSize=v end)
+
+lplr.CharacterAdded:Connect(function(char)
+    task.wait(0.8)  -- wait for character to fully load
+    if not autoRespawnOn then return end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hum then return end
+    if hum.RigType == Enum.HumanoidRigType.R6 then
+        for _, nm in ipairs({"Right Leg","Left Leg"}) do
+            local p = char:FindFirstChild(nm)
+            if p then p.Size=Vector3.new(savedLegSize,2,savedLegSize); p.CanCollide=false end
+        end
+    else
+        for _, nm in ipairs({"RightLowerLeg","LeftLowerLeg"}) do
+            local p = char:FindFirstChild(nm)
+            if p then p.Size=Vector3.new(savedLegSize,2,savedLegSize); p.CanCollide=false end
+        end
+    end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if hrp then hrp.Size=Vector3.new(savedLegSize,2,savedLegSize); hrp.CanCollide=false end
+    -- also re-hook animation react
+    if animReactOn then hookAnimReact() end
+    notify("Respawn Fix","Legs restored!",true)
+end)
+
+-- ── 7. Auto Power Shot ──────────────────────────────────────
+-- Fires power shot remote at the right moment when ball
+-- is in shooting range and you're facing goal direction.
+mkSection(tAuto, "Auto Power Shot")
+mkParagraph(tAuto, "How it works",
+    "Fires power shot when ball is within range. Enable before shooting runs. Does NOT spam — fires once per cooldown.")
+
+local autoPSOn   = false
+local autoPSConn = nil
+local autoPSDist = 5
+local autoPSLast = 0
+local autoPSCooldown = 2.5
+
+mkToggle(tAuto, "Auto Power Shot", "Fires power shot when ball is close", false, function(state)
+    autoPSOn = state
+    if autoPSConn then autoPSConn:Disconnect(); autoPSConn=nil end
+    if not state then notify("Auto PS","OFF",false) return end
+    autoPSConn = RunService.Heartbeat:Connect(function()
+        local now = tick()
+        if (now - autoPSLast) < autoPSCooldown then return end
+        local c    = lplr.Character
+        local root = c and c:FindFirstChild("HumanoidRootPart")
+        if not (c and root) then return end
+        local TPS = GetTPS(); if not TPS then return end
+        if (root.Position - TPS.Position).Magnitude > autoPSDist then return end
+        autoPSLast = now
+        local actions = workspace:FindFirstChild("FE") and workspace.FE:FindFirstChild("Actions")
+        if not actions then return end
+        -- try common power shot remote names
+        for _, name in ipairs({"KickPS","KickG1","PowerShot"}) do
+            local ev = actions:FindFirstChild(name)
+            if ev then
+                pcall(function()
+                    ev:FireServer(TPS, root, 30, Vector3.new(0,0,0))
+                end)
+                break
+            end
+        end
+    end)
+    notify("Auto PS","ON",true)
+end)
+mkSlider(tAuto, "Power Shot Distance", 2, 10, 5, 1, function(v) autoPSDist=v end)
+mkSlider(tAuto, "Power Shot Cooldown (s)", 1, 8, 3, 1, function(v) autoPSCooldown=v*0.8 end)
+
+-- ── 8. Ball Magnet ──────────────────────────────────────────
+-- Gently moves ball toward your feet using CFrame nudging.
+-- Much more subtle than full teleport — looks natural.
+mkSection(tAuto, "Ball Magnet")
+mkParagraph(tAuto, "Ball Magnet",
+    "Slowly pulls the ball toward your feet each frame. Subtle — won't snap the ball across the map.")
+
+local magnetOn   = false
+local magnetConn = nil
+local magnetStr  = 0.08  -- how strong the pull is (0.01 = barely, 0.2 = strong)
+
+mkToggle(tAuto, "Ball Magnet", "Gently pulls ball toward your feet", false, function(state)
+    magnetOn = state
+    if magnetConn then magnetConn:Disconnect(); magnetConn=nil end
+    if not state then notify("Magnet","OFF",false) return end
+    magnetConn = RunService.Heartbeat:Connect(function()
+        local c    = lplr.Character
+        local root = c and c:FindFirstChild("HumanoidRootPart")
+        if not (c and root) then return end
+        local TPS = GetTPS(); if not TPS then return end
+        local dist = (root.Position - TPS.Position).Magnitude
+        if dist > 18 or dist < 1.5 then return end  -- don't pull from too far or if already at feet
+        -- lerp ball position gently toward player feet
+        local targetPos = root.Position + Vector3.new(0,-2.5,0) + (root.CFrame.LookVector * 1.5)
+        TPS.CFrame = TPS.CFrame:Lerp(CFrame.new(targetPos), magnetStr)
+    end)
+    notify("Magnet","ON",true)
+end)
+mkSlider(tAuto, "Magnet Strength", 1, 20, 8, 1, function(v) magnetStr=v*0.01 end)
+
+-- sort the Auto tab into position (insert before Settings in strip)
+-- just reorder button visually
+tAuto.btn.LayoutOrder = 11
+tSettings.btn.LayoutOrder = 12
+
+-- ============================================================
+-- DONE
+-- ============================================================
+task.delay(0.4, function()
+    notify("Wang Script", "Loaded! 🔥 TPS Street Soccer", true)
+end)
