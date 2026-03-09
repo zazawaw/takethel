@@ -1353,76 +1353,61 @@ end)
 -- ============================================================
 -- ── TELEPORT TAB ───────────────────────────────────────────
 -- ============================================================
-local tpTgt; local tpLoopConn
-mkSection(tTP,"Teleport")
-mkInput(tTP,"Target Username","Player name...",function(v)
-    tpTgt=Players:FindFirstChild(v)
-    notify("Target",tpTgt and "Found: "..v or "Not found",tpTgt~=nil)
-end)
-mkButton(tTP,"Teleport to Player",function()
-    local c=lplr.Character
-    if tpTgt and c and tpTgt.Character and c:FindFirstChild("HumanoidRootPart") and tpTgt.Character:FindFirstChild("HumanoidRootPart") then
-        c.HumanoidRootPart.CFrame=tpTgt.Character.HumanoidRootPart.CFrame; notify("TP","Done!",true)
-    end
-end)
-mkButton(tTP,"Teleport Above Player",function()
-    local c=lplr.Character
-    if tpTgt and c and tpTgt.Character and c:FindFirstChild("HumanoidRootPart") and tpTgt.Character:FindFirstChild("HumanoidRootPart") then
-        c.HumanoidRootPart.CFrame=tpTgt.Character.HumanoidRootPart.CFrame+Vector3.new(0,10,0); notify("TP","Above!",true)
-    end
-end)
-mkButton(tTP,"Teleport to Closest Player",function()
-    local c=lplr.Character; if not c then return end
-    local hrp=c:FindFirstChild("HumanoidRootPart"); if not hrp then return end
-    local best,bd=nil,math.huge
-    for _,p in ipairs(Players:GetPlayers()) do
-        if p~=lplr and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
-            local d=(hrp.Position-p.Character.HumanoidRootPart.Position).Magnitude
-            if d<bd then bd=d; best=p end
+mkSection(tTP,"Force Team Join")
+mkParagraph(tTP,"Force Team","Joins red or blue team even when full. Bypasses the capacity check.")
+
+local function forceJoinTeam(teamName)
+    local teamRemotes={"ChangeTeam","JoinTeam","SetTeam","TeamChange","SelectTeam"}
+    local actions=workspace:FindFirstChild("FE") and workspace.FE:FindFirstChild("Actions")
+    local fired=false
+    if actions then
+        for _,name in ipairs(teamRemotes) do
+            local ev=actions:FindFirstChild(name)
+            if ev then
+                pcall(function() ev:FireServer(teamName) end)
+                pcall(function() ev:FireServer(teamName,lplr) end)
+                fired=true; break
+            end
         end
     end
-    if best then hrp.CFrame=best.Character.HumanoidRootPart.CFrame+Vector3.new(0,3,0); notify("TP",best.Name,true)
-    else notify("TP","No players",false) end
-end)
-mkButton(tTP,"Teleport to Random Player",function()
-    local others={}
-    for _,p in ipairs(Players:GetPlayers()) do
-        if p~=lplr and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then table.insert(others,p) end
+    if not fired then
+        local fe=workspace:FindFirstChild("FE")
+        if fe then
+            for _,v in pairs(fe:GetDescendants()) do
+                if v:IsA("RemoteEvent") and v.Name:lower():find("team") then
+                    pcall(function() v:FireServer(teamName) end)
+                    fired=true; break
+                end
+            end
+        end
     end
-    if #others>0 then
-        local t2=others[math.random(#others)]
-        lplr.Character.HumanoidRootPart.CFrame=t2.Character.HumanoidRootPart.CFrame+Vector3.new(0,3,0)
-        notify("TP",t2.Name,true)
-    else notify("TP","No players",false) end
+    local Teams=game:GetService("Teams")
+    local target=nil
+    for _,t in pairs(Teams:GetTeams()) do
+        if t.Name:lower():find(teamName:lower()) then target=t; break end
+    end
+    if target then
+        pcall(function() lplr.Neutral=true; task.wait(0.1); lplr.Neutral=false; lplr.Team=target; lplr.TeamColor=target.TeamColor end)
+        notify("Team","Joined "..target.Name.."!",true)
+    elseif fired then
+        notify("Team","Remote fired: "..teamName,true)
+    else
+        notify("Team","Remote not found",false)
+    end
+end
+
+mkButton(tTP,"🔴  Force Join Red Team",function() forceJoinTeam("Red") end)
+mkButton(tTP,"🔵  Force Join Blue Team",function() forceJoinTeam("Blue") end)
+mkButton(tTP,"⚪  Leave Team / Spectate",function()
+    pcall(function() lplr.Neutral=true; lplr.Team=nil end)
+    notify("Team","Left team",false)
 end)
-mkToggle(tTP,"Loop TP to Ball","Constantly follows the ball",false,function(state)
-    if tpLoopConn then tpLoopConn:Disconnect(); tpLoopConn=nil end
-    if not state then notify("TP Ball","OFF",false) return end
-    tpLoopConn=RunService.Heartbeat:Connect(function()
-        local c=lplr.Character; local hrp=c and c:FindFirstChild("HumanoidRootPart"); local TPS=GetTPS()
-        if hrp and TPS then hrp.CFrame=TPS.CFrame+(-TPS.CFrame.LookVector*5+Vector3.new(0,3,0)) end
-    end)
-    notify("TP Ball","ON",true)
-end)
-mkSection(tTP,"Goal Teleports")
-mkButton(tTP,"Teleport to Red Goal",function()
-    local c=lplr.Character or lplr.CharacterAdded:Wait()
-    local hrp=c:WaitForChild("HumanoidRootPart")
-    local rg=workspace:FindFirstChild("RedGoal")
-    if rg and rg:FindFirstChild("Part") then hrp.CFrame=rg.Part.CFrame+Vector3.new(0,3,0); notify("TP","Red Goal",true)
-    else notify("TP","RedGoal not found",false) end
-end)
-mkButton(tTP,"Teleport to Blue Goal",function()
-    local c=lplr.Character or lplr.CharacterAdded:Wait()
-    local hrp=c:WaitForChild("HumanoidRootPart")
-    local bg=workspace:FindFirstChild("BlueGoal")
-    if bg and bg:FindFirstChild("Part") then hrp.CFrame=bg.Part.CFrame+Vector3.new(0,3,0); notify("TP","Blue Goal",true)
-    else notify("TP","BlueGoal not found",false) end
+mkButton(tTP,"👁  Check My Team",function()
+    local t=lplr.Team
+    if t then notify("Team","On: "..t.Name,true)
+    else notify("Team","No team / neutral",false) end
 end)
 
--- ============================================================
--- ── SKY TAB ────────────────────────────────────────────────
--- ============================================================
 local function SetSky(data,stars)
     local ex=Lighting:FindFirstChildOfClass("Sky"); if ex then ex:Destroy() end
     local sky=Instance.new("Sky")
@@ -1468,6 +1453,257 @@ end)
 mkSection(tSettings,"Transparency")
 mkSlider(tSettings,"UI Opacity",0,90,0,5,function(v)
     Win.BackgroundTransparency=v/100
+end)
+
+-- ============================================================
+-- ── PROFILE SAVE / LOAD SYSTEM
+-- ============================================================
+-- Uses writefile/readfile (Delta supports these)
+-- Saves all key toggle + slider states to a named profile
+-- Profiles stored in: Wang_Profiles.txt as a Lua table string
+
+local PROFILE_FILE = "Wang_Profiles.txt"
+local profiles = {}       -- { profileName = { settingKey = value, ... } }
+local currentProfile = "" -- last loaded/saved profile name
+
+-- All settings that get saved — key → getter function
+-- We read current state from the variables already defined above
+local function getSnapshot()
+    return {
+        -- Reach
+        reachOn      = reachOn,
+        reachDist    = reachDist,
+        -- Reacts
+        rcAutoOn     = rcAutoOn,
+        rcAutoDist   = rcAutoDist,
+        RC_COOLDOWN  = RC_COOLDOWN,
+        -- Auto tab
+        animReactOn  = animReactOn,
+        ANIM_DIST    = ANIM_DIST,
+        smartOn      = smartOn,
+        smartDist    = smartDist,
+        autoDribOn   = autoDribOn,
+        autoDribDist = autoDribDist,
+        autoTackleOn = autoTackleOn,
+        antiAfkOn    = antiAfkOn,
+        autoRespawnOn= autoRespawnOn,
+        savedLegSize = savedLegSize,
+        magnetOn     = magnetOn,
+        magnetStr    = magnetStr,
+        -- Walkspeed / Jump
+        wsOn         = wsOn,
+        wsVal        = wsVal,
+        jpOn         = jpOn,
+        jpVal        = jpVal,
+    }
+end
+
+-- Serialize table to a storable string (simple key=value, no nesting)
+local function serialize(t)
+    local lines = {}
+    for k,v in pairs(t) do
+        local vs = type(v)=="boolean" and (v and "true" or "false") or tostring(v)
+        table.insert(lines, k.."="..vs)
+    end
+    return table.concat(lines, "\n")
+end
+
+local function deserialize(str)
+    local t = {}
+    for line in str:gmatch("[^\n]+") do
+        local k,v = line:match("^(.-)=(.+)$")
+        if k and v then
+            if v=="true" then t[k]=true
+            elseif v=="false" then t[k]=false
+            else local n=tonumber(v); t[k]= n~=nil and n or v end
+        end
+    end
+    return t
+end
+
+-- Save all profiles to file
+local function saveFile()
+    local lines = {}
+    for name, data in pairs(profiles) do
+        table.insert(lines, "["..name.."]")
+        table.insert(lines, serialize(data))
+        table.insert(lines, "---")
+    end
+    pcall(function() writefile(PROFILE_FILE, table.concat(lines,"\n")) end)
+end
+
+-- Load all profiles from file
+local function loadFile()
+    local ok, content = pcall(function() return readfile(PROFILE_FILE) end)
+    if not ok or not content or content=="" then return end
+    local current, name = nil, nil
+    for line in content:gmatch("[^\n]+") do
+        if line:match("^%[.+%]$") then
+            name = line:match("^%[(.+)%]$")
+            current = {}
+        elseif line=="---" then
+            if name and current then profiles[name]=current end
+            name=nil; current=nil
+        elseif current then
+            local k,v = line:match("^(.-)=(.+)$")
+            if k and v then
+                if v=="true" then current[k]=true
+                elseif v=="false" then current[k]=false
+                else local n=tonumber(v); current[k]= n~=nil and n or v end
+            end
+        end
+    end
+end
+
+-- Apply a snapshot to all live variables + call their callbacks
+local toggleRefs = {}  -- filled below after toggles are created
+local function applySnapshot(s)
+    -- Reach
+    if s.reachDist then reachDist=s.reachDist end
+    if s.reachOn~=nil then reachOn=s.reachOn; rebuildReach() end
+    -- Reacts
+    if s.rcAutoDist then rcAutoDist=s.rcAutoDist end
+    if s.RC_COOLDOWN then RC_COOLDOWN=s.RC_COOLDOWN end
+    -- Auto
+    if s.ANIM_DIST then ANIM_DIST=s.ANIM_DIST end
+    if s.smartDist then smartDist=s.smartDist end
+    if s.autoDribDist then autoDribDist=s.autoDribDist end
+    if s.autoTackleDist then autoTackleDist=s.autoTackleDist end
+    if s.savedLegSize then savedLegSize=s.savedLegSize end
+    if s.magnetStr then magnetStr=s.magnetStr end
+    if s.wsVal then wsVal=s.wsVal end
+    if s.jpVal then jpVal=s.jpVal end
+    -- Walkspeed/Jump
+    if s.wsOn~=nil then
+        wsOn=s.wsOn
+        local h=lplr.Character and lplr.Character:FindFirstChildOfClass("Humanoid")
+        if h then h.WalkSpeed=wsOn and wsVal or 23 end
+    end
+    if s.jpOn~=nil then
+        jpOn=s.jpOn
+        local h=lplr.Character and lplr.Character:FindFirstChildOfClass("Humanoid")
+        if h then h.JumpPower=jpOn and jpVal or 50 end
+    end
+    -- Toggle-based features — restart connections if they were on
+    if s.rcAutoOn~=nil then
+        rcAutoOn=s.rcAutoOn
+        if rcAutoConn then rcAutoConn:Disconnect(); rcAutoConn=nil end
+        if rcAutoOn then
+            rcAutoConn=RunService.Heartbeat:Connect(function()
+                if not canFireReact() then return end
+                local c=lplr.Character; local root=c and c:FindFirstChild("HumanoidRootPart")
+                local hum=c and c:FindFirstChildOfClass("Humanoid")
+                if not(c and root and hum) then return end
+                local TPS=GetTPS(); if not TPS then return end
+                if(root.Position-TPS.Position).Magnitude<=rcAutoDist then doReact(c,hum,TPS) end
+            end)
+        end
+    end
+    if s.animReactOn~=nil then animReactOn=s.animReactOn; hookAnimReact() end
+    if s.smartOn~=nil then
+        smartOn=s.smartOn
+        if smartConn then smartConn:Disconnect(); smartConn=nil end
+        if smartOn then
+            smartConn=RunService.Heartbeat:Connect(function()
+                if not canFireReact() then return end
+                local c=lplr.Character; local root=c and c:FindFirstChild("HumanoidRootPart")
+                local hum=c and c:FindFirstChildOfClass("Humanoid")
+                if not(c and root and hum) then return end
+                local TPS=GetTPS(); if not TPS then return end
+                local dist=(root.Position-TPS.Position).Magnitude
+                if dist>smartDist then smartLastPos=nil; return end
+                local toPlayer=(root.Position-TPS.Position).Unit
+                local ballVel=TPS.AssemblyLinearVelocity
+                if ballVel.Magnitude<0.5 then return end
+                if toPlayer:Dot(ballVel.Unit)>0.3 then doReact(c,hum,TPS) end
+            end)
+        end
+    end
+    if s.antiAfkOn~=nil then
+        antiAfkOn=s.antiAfkOn
+        if antiAfkTask then task.cancel(antiAfkTask); antiAfkTask=nil end
+        if antiAfkOn then
+            antiAfkTask=task.spawn(function()
+                while antiAfkOn do
+                    task.wait(110+math.random(0,20))
+                    if not antiAfkOn then break end
+                    local c=lplr.Character; local hum=c and c:FindFirstChildOfClass("Humanoid")
+                    local root=c and c:FindFirstChild("HumanoidRootPart")
+                    if hum and root then hum:MoveTo(root.Position+Vector3.new(math.random(-1,1)*0.3,0,math.random(-1,1)*0.3)) end
+                end
+            end)
+        end
+    end
+    if s.autoRespawnOn~=nil then autoRespawnOn=s.autoRespawnOn end
+    if s.magnetOn~=nil then
+        magnetOn=s.magnetOn
+        if magnetConn then magnetConn:Disconnect(); magnetConn=nil end
+        if magnetOn then
+            magnetConn=RunService.Heartbeat:Connect(function()
+                local c=lplr.Character; local root=c and c:FindFirstChild("HumanoidRootPart")
+                if not(c and root) then return end
+                local TPS=GetTPS(); if not TPS then return end
+                local dist=(root.Position-TPS.Position).Magnitude
+                if dist>18 or dist<1.5 then return end
+                local targetPos=root.Position+Vector3.new(0,-2.5,0)+(root.CFrame.LookVector*1.5)
+                TPS.CFrame=TPS.CFrame:Lerp(CFrame.new(targetPos),magnetStr)
+            end)
+        end
+    end
+end
+
+-- Load profiles from file on startup
+loadFile()
+
+-- ── Profile UI ─────────────────────────────────────────────
+mkSection(tSettings,"⚡ Profiles — Save & Load Settings")
+mkParagraph(tSettings,"How it works",
+    "Type a profile name, tap Save to store all your current settings. Next game just type the name and tap Load — everything turns on automatically.")
+
+local profileNameBox = mkInput(tSettings,"Profile Name","e.g. Main Setup",function(v)
+    currentProfile = v
+end)
+
+mkButton(tSettings,"💾  Save Current Settings",function()
+    if currentProfile=="" then notify("Profile","Type a name first!",false) return end
+    profiles[currentProfile] = getSnapshot()
+    saveFile()
+    notify("Saved","Profile: "..currentProfile,true)
+end)
+
+mkButton(tSettings,"📂  Load Profile",function()
+    if currentProfile=="" then notify("Profile","Type a name first!",false) return end
+    local p = profiles[currentProfile]
+    if not p then notify("Profile","Not found: "..currentProfile,false) return end
+    applySnapshot(p)
+    notify("Loaded","Profile: "..currentProfile,true)
+end)
+
+mkButton(tSettings,"🗑️  Delete Profile",function()
+    if currentProfile=="" then notify("Profile","Type a name first!",false) return end
+    if not profiles[currentProfile] then notify("Profile","Not found",false) return end
+    profiles[currentProfile]=nil
+    saveFile()
+    notify("Deleted",currentProfile,false)
+end)
+
+-- Show saved profile names
+mkButton(tSettings,"📋  List Saved Profiles",function()
+    local names={}
+    for k in pairs(profiles) do table.insert(names,k) end
+    if #names==0 then notify("Profiles","No profiles saved yet",false)
+    else notify("Profiles",table.concat(names,", "),true) end
+end)
+
+-- Auto-load last used profile on startup
+mkParagraph(tSettings,"Auto Load","If you have a profile named exactly 'default' it will load automatically every time you execute the script.")
+
+-- Auto load 'default' profile if it exists
+task.delay(0.6, function()
+    if profiles["default"] then
+        applySnapshot(profiles["default"])
+        notify("Auto Loaded","Profile: default",true)
+    end
 end)
 
 -- ============================================================
