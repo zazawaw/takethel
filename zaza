@@ -644,8 +644,6 @@ local tPerf     = mkTab("Perf",     "📶")
 local tHelpers  = mkTab("Helpers",  "🎯")
 local tBall     = mkTab("Ball",     "⚽")
 local tGP       = mkTab("GP",       "💎")
-local tTP       = mkTab("TP",       "🌀")
-local tSky      = mkTab("Sky",      "🌌")
 local tSettings = mkTab("Settings", "⚙️")
 
 -- Open first tab immediately (proper call, not :Fire())
@@ -1351,94 +1349,6 @@ mkToggle(tGP,"Powerful Tackle",nil,false,function(state)
 end)
 
 -- ============================================================
--- ── TELEPORT TAB ───────────────────────────────────────────
--- ============================================================
-mkSection(tTP,"Force Team Join")
-mkParagraph(tTP,"Force Team","Joins red or blue team even when full. Bypasses the capacity check.")
-
-local function forceJoinTeam(teamName)
-    local teamRemotes={"ChangeTeam","JoinTeam","SetTeam","TeamChange","SelectTeam"}
-    local actions=workspace:FindFirstChild("FE") and workspace.FE:FindFirstChild("Actions")
-    local fired=false
-    if actions then
-        for _,name in ipairs(teamRemotes) do
-            local ev=actions:FindFirstChild(name)
-            if ev then
-                pcall(function() ev:FireServer(teamName) end)
-                pcall(function() ev:FireServer(teamName,lplr) end)
-                fired=true; break
-            end
-        end
-    end
-    if not fired then
-        local fe=workspace:FindFirstChild("FE")
-        if fe then
-            for _,v in pairs(fe:GetDescendants()) do
-                if v:IsA("RemoteEvent") and v.Name:lower():find("team") then
-                    pcall(function() v:FireServer(teamName) end)
-                    fired=true; break
-                end
-            end
-        end
-    end
-    local Teams=game:GetService("Teams")
-    local target=nil
-    for _,t in pairs(Teams:GetTeams()) do
-        if t.Name:lower():find(teamName:lower()) then target=t; break end
-    end
-    if target then
-        pcall(function() lplr.Neutral=true; task.wait(0.1); lplr.Neutral=false; lplr.Team=target; lplr.TeamColor=target.TeamColor end)
-        notify("Team","Joined "..target.Name.."!",true)
-    elseif fired then
-        notify("Team","Remote fired: "..teamName,true)
-    else
-        notify("Team","Remote not found",false)
-    end
-end
-
-mkButton(tTP,"🔴  Force Join Red Team",function() forceJoinTeam("Red") end)
-mkButton(tTP,"🔵  Force Join Blue Team",function() forceJoinTeam("Blue") end)
-mkButton(tTP,"⚪  Leave Team / Spectate",function()
-    pcall(function() lplr.Neutral=true; lplr.Team=nil end)
-    notify("Team","Left team",false)
-end)
-mkButton(tTP,"👁  Check My Team",function()
-    local t=lplr.Team
-    if t then notify("Team","On: "..t.Name,true)
-    else notify("Team","No team / neutral",false) end
-end)
-
-local function SetSky(data,stars)
-    local ex=Lighting:FindFirstChildOfClass("Sky"); if ex then ex:Destroy() end
-    local sky=Instance.new("Sky")
-    sky.SkyboxBk=data.Bk; sky.SkyboxDn=data.Dn; sky.SkyboxFt=data.Ft
-    sky.SkyboxLf=data.Lf; sky.SkyboxRt=data.Rt; sky.SkyboxUp=data.Up
-    sky.StarCount=stars or 3000; sky.Parent=Lighting
-end
-
-local function sk(id) return "http://www.roblox.com/asset/?id="..id end
-
-mkSection(tSky,"Sky Presets")
-local skyList={
-    {"Night Sky",     {Bk=sk"12064107",Dn=sk"12064152",Ft=sk"12064121",Lf=sk"12063984",Rt=sk"12064115",Up=sk"12064131"},0},
-    {"Scary Night",   {Bk=sk"48020371",Dn=sk"48020144",Ft=sk"48020234",Lf=sk"48020211",Rt=sk"48020254",Up=sk"48020383"},3000},
-    {"Sakura Sky",    {Bk=sk"271042516",Dn=sk"271077243",Ft=sk"271042556",Lf=sk"271042310",Rt=sk"271042467",Up=sk"271077958"},1334},
-    {"Galaxy Planets",{Bk=sk"15983968922",Dn=sk"15983966825",Ft=sk"15983965025",Lf=sk"15983967420",Rt=sk"15983966246",Up=sk"15983964246"},3000},
-    {"Purple Night",  {Bk=sk"5084575798",Dn=sk"5084575916",Ft=sk"5103949679",Lf=sk"5103948542",Rt=sk"5103948784",Up=sk"5084576400"},3000},
-    {"Sunset Orange", {Bk=sk"458016711",Dn=sk"458016826",Ft=sk"458016532",Lf=sk"458016655",Rt=sk"458016782",Up=sk"458016792"},3000},
-    {"Purple Sky",    {Bk=sk"570557514",Dn=sk"570557775",Ft=sk"570557559",Lf=sk"570557620",Rt=sk"570557672",Up=sk"570557727"},3000},
-    {"Gray Sky",      {Bk=sk"18703245834",Dn=sk"18703243349",Ft=sk"18703240532",Lf=sk"18703237556",Rt=sk"18703235430",Up=sk"18703232671"},3500},
-    {"Mountain Sky",  {Bk=sk"160188495",Dn=sk"160188614",Ft=sk"160188609",Lf=sk"160188589",Rt=sk"160188597",Up=sk"160188588"},3000},
-    {"Pinkie Preppy", {Bk=sk"11555017034",Dn=sk"11555013415",Ft=sk"11555010145",Lf=sk"11555006545",Rt=sk"11555000712",Up=sk"11554996247"},3000},
-    {"Mountain Sky 2",{Bk=sk"368385273",Dn=sk"48015300",Ft=sk"368388290",Lf=sk"368390615",Rt=sk"368385190",Up=sk"48015387"},3000},
-    {"Sunset Mountain",{Bk=sk"17901353811",Dn=sk"17901366771",Ft=sk"17901356262",Lf=sk"17901359687",Rt=sk"17901362326",Up=sk"17901365106"},3000},
-}
-for _,sd in ipairs(skyList) do
-    local name,data,stars=sd[1],sd[2],sd[3]
-    mkButton(tSky,name,function() SetSky(data,stars); notify("Sky",name,true) end)
-end
-
--- ============================================================
 -- ── SETTINGS TAB ───────────────────────────────────────────
 -- ============================================================
 mkSection(tSettings,"About")
@@ -1463,6 +1373,17 @@ end)
 -- Profiles stored in: Wang_Profiles.txt as a Lua table string
 
 local PROFILE_FILE = "Wang_Profiles.txt"
+local function safeWrite(data)
+    local ok = pcall(function() writefile(PROFILE_FILE, data) end)
+    if not ok then pcall(function() writefile("workspace/"..PROFILE_FILE, data) end) end
+end
+local function safeRead()
+    local ok, data = pcall(function() return readfile(PROFILE_FILE) end)
+    if ok and data and data ~= "" then return data end
+    ok, data = pcall(function() return readfile("workspace/"..PROFILE_FILE) end)
+    if ok and data and data ~= "" then return data end
+    return nil
+end
 local profiles = {}       -- { profileName = { settingKey = value, ... } }
 local currentProfile = "" -- last loaded/saved profile name
 
@@ -1529,13 +1450,13 @@ local function saveFile()
         table.insert(lines, serialize(data))
         table.insert(lines, "---")
     end
-    pcall(function() writefile(PROFILE_FILE, table.concat(lines,"\n")) end)
+    safeWrite(table.concat(lines,"\n"))
 end
 
 -- Load all profiles from file
 local function loadFile()
-    local ok, content = pcall(function() return readfile(PROFILE_FILE) end)
-    if not ok or not content or content=="" then return end
+    local content = safeRead()
+    if not content or content=="" then return end
     local current, name = nil, nil
     for line in content:gmatch("[^\n]+") do
         if line:match("^%[.+%]$") then
@@ -1662,6 +1583,10 @@ mkParagraph(tSettings,"How it works",
 
 local profileNameBox = mkInput(tSettings,"Profile Name","e.g. Main Setup",function(v)
     currentProfile = v
+end)
+-- also update live as user types so they dont need to press Enter
+profileNameBox:GetPropertyChangedSignal("Text"):Connect(function()
+    currentProfile = profileNameBox.Text
 end)
 
 mkButton(tSettings,"💾  Save Current Settings",function()
@@ -2044,8 +1969,8 @@ mkSlider(tAuto, "Magnet Strength", 1, 20, 8, 1, function(v) magnetStr=v*0.01 end
 
 -- sort the Auto tab into position (insert before Settings in strip)
 -- just reorder button visually
-tAuto.btn.LayoutOrder = 11
-tSettings.btn.LayoutOrder = 12
+tAuto.btn.LayoutOrder = 9
+tSettings.btn.LayoutOrder = 10
 
 -- ============================================================
 -- DONE
