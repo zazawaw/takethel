@@ -775,10 +775,12 @@ local rcTouchConn
 local RC_COOLDOWN = 0.35   -- seconds between reacts (adjustable)
 local rcLastFired  = 0
 local rcBusy       = false  -- prevents double-firing within same window
+local tackling     = false  -- blocks all other reacts during tackle animation
 
 local function canFireReact()
     local now = tick()
     if rcBusy then return false end
+    if tackling then return false end  -- block all reacts during tackle
     if (now - rcLastFired) < RC_COOLDOWN then return false end
     return true
 end
@@ -897,6 +899,7 @@ local function hookAnimReact()
         if (root.Position - TPS.Position).Magnitude > ANIM_DIST then return end
         local limb = GetLimb(char, hum); if not limb then return end
         task.delay(0.06 + math.random(0,4)*0.01, function()
+            if tackling then return end  -- cancelled if tackle started
             if not (limb.Parent and TPS.Parent) then return end
             local t2 = GetTPS(); if not t2 then return end
             -- re-check after delay
@@ -936,27 +939,33 @@ local function hookTackleReact()
         local root = char:FindFirstChild("HumanoidRootPart"); if not root then return end
         if (root.Position - TPS.Position).Magnitude > TACKLE_DIST then return end
         local limb = GetLimb(char, hum); if not limb then return end
-        -- pause reach during tackle
+        -- pause reach and block all other reacts during tackle
         local wasReachOn = reachOn
         if wasReachOn then reachOn=false; rebuildReach() end
+        tackling = true
         -- wait 2 frames so reach loop fully stops before firing
         task.delay(0.18 + math.random(0,5)*0.01, function()
             if not (limb.Parent and TPS.Parent) then
-                if wasReachOn then reachOn=true; rebuildReach() end; return
+                if wasReachOn then reachOn=true; rebuildReach() end
+                tackling = false; return
             end
             local t2 = GetTPS(); if not t2 then
-                if wasReachOn then reachOn=true; rebuildReach() end; return
+                if wasReachOn then reachOn=true; rebuildReach() end
+                tackling = false; return
             end
             if (root.Position - t2.Position).Magnitude > TACKLE_DIST then
-                if wasReachOn then reachOn=true; rebuildReach() end; return
+                if wasReachOn then reachOn=true; rebuildReach() end
+                tackling = false; return
             end
             firetouchinterest(limb, t2, 0); firetouchinterest(limb, t2, 1)
         end)
         task.delay(0.65, function()
             if wasReachOn then reachOn=true; rebuildReach() end
+            tackling = false
         end)
         track.Stopped:Connect(function()
             if wasReachOn and not reachOn then reachOn=true; rebuildReach() end
+            tackling = false
         end)
     end)
 end
@@ -974,7 +983,7 @@ mkSection(tReacts, "Smart React")
 
 local smartOn   = false
 local smartConn = nil
-local smartDist = 7
+local smartDist = 5
 mkToggle(tReacts, "Smart React", "Only reacts when ball is heading toward you", false, function(state)
     smartOn = state
     if smartConn then smartConn:Disconnect(); smartConn=nil end
