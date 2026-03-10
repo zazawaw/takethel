@@ -958,21 +958,6 @@ local function hookTackleReact()
                 tackling = false; return
             end
             firetouchinterest(limb, t2, 0); firetouchinterest(limb, t2, 1)
-            -- fire in-game header remote during tackle for tackle-header combo
-            local head = char:FindFirstChild("Head")
-            if head then
-                firetouchinterest(head, t2, 0); firetouchinterest(head, t2, 1)
-            end
-            local actions = workspace:FindFirstChild("FE") and workspace.FE:FindFirstChild("Actions")
-            if actions then
-                for _, name in ipairs({"Header","KickH","HeadKick"}) do
-                    local ev = actions:FindFirstChild(name)
-                    if ev then
-                        pcall(function() ev:FireServer(t2, root) end)
-                        break
-                    end
-                end
-            end
         end)
         task.delay(0.65, function()
             if wasReachOn then reachOn=true; rebuildReach() end
