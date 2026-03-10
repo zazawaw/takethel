@@ -950,8 +950,6 @@ local function hookTackleReact()
                 if wasReachOn then reachOn=true; rebuildReach() end; return
             end
             firetouchinterest(limb, t2, 0); firetouchinterest(limb, t2, 1)
-            local hrp = char:FindFirstChild("HumanoidRootPart")
-            if hrp then firetouchinterest(hrp, t2, 0); firetouchinterest(hrp, t2, 1) end
         end)
         task.delay(0.65, function()
             if wasReachOn then reachOn=true; rebuildReach() end
