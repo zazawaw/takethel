@@ -637,7 +637,6 @@ end
 -- ============================================================
 local tReach    = mkTab("Reach",    "🦵")
 local tMoss     = mkTab("Mossing",  "🙋")
-local tVolley   = mkTab("Volley",   "🏐")
 local tReacts   = mkTab("Reacts",   "⚡")
 local tPlayer   = mkTab("Player",   "👤")
 local tPerf     = mkTab("Perf",     "📶")
@@ -771,44 +770,6 @@ for _,pct in ipairs({25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,100}) do
 end
 
 -- ============================================================
--- ── VOLLEY TAB ─────────────────────────────────────────────
--- ============================================================
-local vOn=false; local vDist=10; local vConn; local vPart
-
-mkSection(tVolley,"Volley Reach")
-mkParagraph(tVolley,"Info","Only reacts when you are inside the box. Pick your team first then enable.")
-mkButton(tVolley,"🔵 Blue Team",function()
-    vPart=workspace.GKSystem and workspace.GKSystem:FindFirstChild("Fix1")
-    if vPart then vPart.Size=Vector3.new(85,15.48,34.8) end
-    notify("Volley","Blue selected",true)
-end)
-mkButton(tVolley,"🔴 Red Team",function()
-    vPart=workspace.GKSystem and workspace.GKSystem:FindFirstChild("Fix2")
-    if vPart then vPart.Size=Vector3.new(85,15.48,34.8) end
-    notify("Volley","Red selected",true)
-end)
-mkToggle(tVolley,"Enable Volley Reach",nil,false,function(state)
-    vOn=state
-    if vConn then vConn:Disconnect(); vConn=nil end
-    if not state then notify("Volley","OFF",false) return end
-    if not vPart then notify("Volley","Pick team first!",false) return end
-    vConn=RunService.RenderStepped:Connect(function()
-        local c=lplr.Character; local root=c and c:FindFirstChild("HumanoidRootPart")
-        local hum=c and c:FindFirstChildOfClass("Humanoid")
-        if not(root and hum) then return end
-        local mn=vPart.Position-(vPart.Size/2); local mx=vPart.Position+(vPart.Size/2)
-        local p=root.Position
-        if not(p.X>=mn.X and p.X<=mx.X and p.Y>=mn.Y and p.Y<=mx.Y and p.Z>=mn.Z and p.Z<=mx.Z) then return end
-        local TPS=GetTPS(); if not TPS then return end
-        if(root.Position-TPS.Position).Magnitude<=vDist then
-            local limb=GetLimb(c,hum); if limb then firetouchinterest(limb,TPS,0); firetouchinterest(limb,TPS,1) end
-        end
-    end)
-    notify("Volley","ON",true)
-end)
-mkSlider(tVolley,"Volley Distance",0,15,10,1,function(v) vDist=v end)
-
--- ============================================================
 -- ── REACTS TAB ─────────────────────────────────────────────
 -- ============================================================
 local rcColConn; local rcFollower
@@ -903,415 +864,29 @@ mkToggle(tReacts,"Enable Touch React","Fires on physical ball contact",false,fun
     notify("Touch React","ON",true)
 end)
 
--- ── Auto React (cooldown, Heartbeat not RenderStepped) ────
+-- ── Auto React ─────────────────────────────────────────────
 mkSection(tReacts,"Auto React")
-mkParagraph(tReacts,"Auto React","Checks every 0.05s if ball is in range then fires once. Much lighter than before — no lag.")
 mkToggle(tReacts,"Enable Auto React","Fires when ball is within distance",false,function(state)
     rcAutoOn=state
     if rcAutoConn then rcAutoConn:Disconnect(); rcAutoConn=nil end
     if not state then notify("Auto React","OFF",false) return end
-    -- Use task.spawn with a wait loop instead of RenderStepped — much lighter on mobile
-    rcAutoConn = RunService.Heartbeat:Connect(function()
+    rcAutoConn=RunService.Heartbeat:Connect(function()
         if not canFireReact() then return end
         local c=lplr.Character; local root=c and c:FindFirstChild("HumanoidRootPart")
         local hum=c and c:FindFirstChildOfClass("Humanoid")
         if not(c and root and hum) then return end
         local TPS=GetTPS(); if not TPS then return end
         local dist=(root.Position-TPS.Position).Magnitude
-        if dist<=rcAutoDist then
-            doReact(c, hum, TPS)
-        end
+        -- hard distance cap same as Touch React — won't fire from far away
+        if dist > rcAutoDist then return end
+        doReact(c,hum,TPS)
     end)
     notify("Auto React","ON",true)
 end)
-mkSlider(tReacts,"Auto React Distance",2,18,6,1,function(v) rcAutoDist=v end)
+mkSlider(tReacts,"Auto React Distance",2,10,6,1,function(v) rcAutoDist=v end)
 
--- ── Mobile React Button (fixed — no drag conflict) ────────
-mkSection(tReacts,"Mobile React Button")
-mkParagraph(tReacts,"Tap Button","Big tap button on your screen. Hold and drag to move it. Short tap fires the react.")
-mkToggle(tReacts,"Show React Button","Floating tap button on screen",false,function(state)
-    if mobileReactGui then mobileReactGui:Destroy(); mobileReactGui=nil end
-    if not state then return end
-
-    mobileReactGui=Instance.new("ScreenGui")
-    mobileReactGui.Name="WangReactBtn"; mobileReactGui.ResetOnSpawn=false
-    mobileReactGui.IgnoreGuiInset=true; mobileReactGui.DisplayOrder=998
-    mobileReactGui.Parent=lplr.PlayerGui
-
-    local rb=Instance.new("TextButton")
-    rb.Size=UDim2.new(0,82,0,82)
-    rb.Position=UDim2.new(0,20,0.58,0)
-    rb.BackgroundColor3=ACCENT2
-    rb.Text="⚡\nREACT"
-    rb.TextSize=13; rb.Font=Enum.Font.GothamBold
-    rb.TextColor3=WHITE; rb.BorderSizePixel=0
-    rb.Parent=mobileReactGui
-    mkCorner(rb,41)
-    local rs=Instance.new("UIStroke"); rs.Color=ACCENT; rs.Thickness=2.5; rs.Parent=rb
-
-    -- Drag logic that DOES NOT block taps
-    -- We track if finger moved significantly → drag, else → tap
-    local touchStart=nil; local startPos=nil; local btnStart=nil; local moved=false
-
-    rb.InputBegan:Connect(function(inp)
-        if inp.UserInputType==Enum.UserInputType.Touch then
-            touchStart=inp.Position; btnStart=rb.Position; moved=false
-        end
-    end)
-
-    rb.InputChanged:Connect(function(inp)
-        if inp.UserInputType==Enum.UserInputType.Touch and touchStart then
-            local delta=inp.Position-touchStart
-            if delta.Magnitude>10 then  -- only drag if finger moved >10px
-                moved=true
-                rb.Position=UDim2.new(
-                    btnStart.X.Scale, btnStart.X.Offset+delta.X,
-                    btnStart.Y.Scale, btnStart.Y.Offset+delta.Y
-                )
-            end
-        end
-    end)
-
-    rb.InputEnded:Connect(function(inp)
-        if inp.UserInputType==Enum.UserInputType.Touch then
-            if not moved then
-                -- It was a tap — fire the react
-                local c=lplr.Character; local hum=c and c:FindFirstChildOfClass("Humanoid")
-                local TPS=GetTPS()
-                if c and hum and TPS then
-                    doReact(c, hum, TPS)
-                    TweenService:Create(rb,TweenInfo.new(0.07),{BackgroundColor3=CON}):Play()
-                    task.delay(0.15,function()
-                        TweenService:Create(rb,TweenInfo.new(0.07),{BackgroundColor3=ACCENT2}):Play()
-                    end)
-                end
-            end
-            touchStart=nil; moved=false
-        end
-    end)
-end)
-
--- ── Prediction React (cooldown, legit timing) ─────────────
-mkSection(tReacts,"Prediction React")
-mkParagraph(tReacts,"Prediction","Predicts where the ball will be and fires react just before it arrives.")
-mkToggle(tReacts,"Enable Prediction React","Pre-fires based on ball velocity",false,function(state)
-    rcPredOn=state
-    if rcPredConn then rcPredConn:Disconnect(); rcPredConn=nil end
-    if not state then notify("Prediction","OFF",false) return end
-    rcPredConn=RunService.Heartbeat:Connect(function()
-        if not canFireReact() then return end
-        local c=lplr.Character; local root=c and c:FindFirstChild("HumanoidRootPart")
-        local hum=c and c:FindFirstChildOfClass("Humanoid")
-        if not(c and root and hum) then return end
-        local TPS=GetTPS(); if not TPS then return end
-        -- predict 4 frames ahead
-        local pred=TPS.Position+(TPS.AssemblyLinearVelocity*(4/60))
-        if(root.Position-pred).Magnitude<=rcPredDist then
-            doReact(c, hum, TPS)
-        end
-    end)
-    notify("Prediction","ON",true)
-end)
-mkSlider(tReacts,"Prediction Distance",2,22,10,1,function(v) rcPredDist=v end)
-
--- ── GK React ──────────────────────────────────────────────
-mkSection(tReacts,"Goalkeeper React")
-mkParagraph(tReacts,"GK React","Hooks all GK save/tackle/header RemoteEvents. Enable once per session.")
-mkToggle(tReacts,"Enable GK React Hook","Intercepts GK events",false,function(state)
-    if not state then notify("GK React","Reload to unhook",false) return end
-    if rcGKHooked then notify("GK","Already hooked",true) return end
-    rcGKHooked=true
-    local gkA={SaveRA=true,SaveLA=true,SaveRL=true,SaveLL=true,SaveT=true,Tackle=true,Header=true}
-    local meta=getrawmetatable(game); local oldNC=meta.__namecall
-    setreadonly(meta,false)
-    meta.__namecall=newcclosure(function(self,...)
-        local method=getnamecallmethod()
-        if method=="FireServer" then
-            local ok,rn=pcall(function() return self.Name end)
-            if ok and gkA[rn] then
-                local args={...}; local c=lplr.Character; local root=c and c:FindFirstChild("HumanoidRootPart")
-                if root then args[1]=root.CFrame end
-                return oldNC(self,table.unpack(args))
-            end
-        end
-        return oldNC(self,...)
-    end)
-    setreadonly(meta,true)
-    notify("GK React","Hooked!",true)
-end)
-
--- ============================================================
--- ── PLAYER TAB ─────────────────────────────────────────────
--- ============================================================
-local wsOn=false; local wsVal=23; local jpOn=false; local jpVal=50
-
-mkSection(tPlayer,"Walkspeed")
-mkToggle(tPlayer,"Enable Walkspeed",nil,false,function(v)
-    wsOn=v; local h=lplr.Character and lplr.Character:FindFirstChildOfClass("Humanoid")
-    if h then h.WalkSpeed=v and wsVal or 23 end; notify("Walkspeed",v and "ON" or "Reset",v)
-end)
-mkSlider(tPlayer,"Walkspeed",23,75,23,1,function(v)
-    wsVal=v; if wsOn then
-        local h=lplr.Character and lplr.Character:FindFirstChildOfClass("Humanoid")
-        if h then h.WalkSpeed=v end
-    end
-end)
-mkButton(tPlayer,"Reset Walkspeed",function()
-    local h=lplr.Character and lplr.Character:FindFirstChildOfClass("Humanoid")
-    if h then h.WalkSpeed=23 end; notify("Walkspeed","Reset to 23",true)
-end)
-
-mkSection(tPlayer,"Jump Power")
-mkToggle(tPlayer,"Enable Jump Power",nil,false,function(v)
-    jpOn=v; local h=lplr.Character and lplr.Character:FindFirstChildOfClass("Humanoid")
-    if h then h.JumpPower=v and jpVal or 50 end; notify("Jump",v and "ON" or "Reset",v)
-end)
-mkSlider(tPlayer,"Jump Power",50,120,50,1,function(v)
-    jpVal=v; if jpOn then
-        local h=lplr.Character and lplr.Character:FindFirstChildOfClass("Humanoid")
-        if h then h.JumpPower=v end
-    end
-end)
-mkButton(tPlayer,"Reset Jump Power",function()
-    local h=lplr.Character and lplr.Character:FindFirstChildOfClass("Humanoid")
-    if h then h.JumpPower=50 end; notify("Jump","Reset to 50",true)
-end)
-
-mkSection(tPlayer,"Avatar Steal")
-local disguiseOn=false; local disguiseUser=""; local disguiseDesc=nil
-mkInput(tPlayer,"Target Username","Enter username...",function(v) disguiseUser=v end)
-mkToggle(tPlayer,"Enable Avatar Steal","Copies another player's appearance",false,function(state)
-    disguiseOn=state
-    if state and disguiseUser~="" and lplr.Character then
-        task.spawn(function()
-            pcall(function()
-                local id=Players:GetUserIdFromNameAsync(disguiseUser)
-                disguiseDesc=Players:GetHumanoidDescriptionFromUserId(id)
-                local hum=lplr.Character:WaitForChild("Humanoid")
-                hum:ApplyDescriptionClientServer(disguiseDesc)
-            end)
-        end)
-        notify("Avatar Steal","Applied!",true)
-    elseif not state and lplr.Character then
-        local hum=lplr.Character:FindFirstChildOfClass("Humanoid")
-        if hum then pcall(function() hum:ApplyDescriptionClientServer(Players:GetHumanoidDescriptionAsync(lplr.UserId)) end) end
-        notify("Avatar Steal","Reverted",false)
-    end
-end)
-
--- ============================================================
--- ── PERFORMANCE TAB ────────────────────────────────────────
--- ============================================================
-mkSection(tPerf,"Network")
-mkInput(tPerf,"Clumsy (0.01–0.10)","e.g. 0.05",function(v)
-    local n=tonumber(v); if not n then return end
-    settings():GetService("NetworkSettings").IncomingReplicationLag=n
-    notify("Clumsy","Set to "..v,true)
-end)
-mkSection(tPerf,"FPS")
-mkButton(tPerf,"Unlock FPS",function() setfpscap(10000); notify("FPS","Uncapped!",true) end)
-mkButton(tPerf,"FPS Boost",function()
-    local t=workspace.Terrain
-    t.WaterWaveSize=0; t.WaterWaveSpeed=0; t.WaterReflectance=0; t.WaterTransparency=0
-    Lighting.GlobalShadows=false; Lighting.FogEnd=9e9; Lighting.Brightness=0
-    settings().Rendering.QualityLevel="Level01"
-    local TPS=GetTPS()
-    local char=lplr.Character
-    for _,d in pairs(game:GetDescendants()) do
-        -- skip the ball entirely so textures/decals stay intact
-        if TPS and (d==TPS or d:IsDescendantOf(TPS)) then continue end
-        -- skip player character so skin/clothes stay intact
-        if char and d:IsDescendantOf(char) then continue end
-        if d:IsA("BasePart") or d:IsA("MeshPart") then
-            d.Material="SmoothPlastic"; d.Reflectance=0; d.CastShadow=false
-        elseif d:IsA("Decal") then
-            d.Transparency=1
-        elseif d:IsA("ParticleEmitter") or d:IsA("Trail") then
-            d.Lifetime=NumberRange.new(0)
-        elseif d:IsA("Fire") or d:IsA("SpotLight") or d:IsA("Smoke") then
-            d.Enabled=false
-        end
-    end
-    for _,e in pairs(Lighting:GetChildren()) do
-        if e:IsA("PostEffect") or e:IsA("DepthOfFieldEffect") then e.Enabled=false end
-    end
-    notify("FPS Boost","Applied! Ball & player kept",true)
-end)
-mkButton(tPerf,"Show FPS Counter",function()
-    local sg=Instance.new("ScreenGui"); sg.ResetOnSpawn=false; sg.IgnoreGuiInset=true; sg.Parent=lplr.PlayerGui
-    local f=Instance.new("Frame"); f.Size=UDim2.new(0,76,0,52); f.Position=UDim2.new(0,10,0,100)
-    f.BackgroundColor3=Color3.fromRGB(20,20,20); f.Active=true; f.Parent=sg; mkCorner(f,6); mkDrag(f)
-    local fl=Instance.new("TextLabel"); fl.Size=UDim2.new(1,0,1,0); fl.BackgroundTransparency=1
-    fl.Font=Enum.Font.SourceSansBold; fl.TextSize=30; fl.TextColor3=CON; fl.Parent=f
-    local lt,fr=tick(),0
-    RunService.RenderStepped:Connect(function()
-        fr+=1; local now=tick()
-        if now-lt>=1 then
-            local fps=math.floor(fr/(now-lt)); fl.Text=tostring(fps)
-            fl.TextColor3=fps>=60 and CON or fps>=30 and Color3.fromRGB(255,170,0) or COFF
-            lt=now; fr=0
-        end
-    end)
-    notify("FPS","Counter added",true)
-end)
-mkButton(tPerf,"Fake Ping 20-30ms",function()
-    local CG=game:GetService("CoreGui")
-    local PS=CG:WaitForChild("RobloxGui"):WaitForChild("PerformanceStats")
-    local vl; for _,b in ipairs(PS:GetChildren()) do
-        if b.Name=="PS_Button" then
-            local pn=b:FindFirstChild("StatsMiniTextPanelClass")
-            if pn then local ti=pn:FindFirstChild("TitleLabel"); local va=pn:FindFirstChild("ValueLabel")
-                if ti and va and ti.Text=="NetworkPing" then vl=va; break end end
-        end
-    end
-    if not vl then notify("Ping","Label not found",false) return end
-    local fp=math.random(20,25); local ti2=0
-    RunService.RenderStepped:Connect(function(dt)
-        ti2+=dt; if ti2>=0.7 then ti2=0; fp=math.clamp(fp+math.random(-1,1),18,30) end
-        vl.Text=string.format("%d.%02d ms",fp,math.random(0,99))
-    end)
-    notify("Ping","Faking 20-30ms",true)
-end)
-
--- ============================================================
--- ── HELPERS TAB ────────────────────────────────────────────
--- ============================================================
-mkSection(tHelpers,"ZZZZ Helper")
-mkToggle(tHelpers,"Enable ZZZZ Helper","Invisible platform that follows the ball",false,function(state)
-    for _,c in ipairs(workspace:GetChildren()) do if c.Name=="WangZZZZ" then c:Destroy() end end
-    if not state then return end
-    local p=Instance.new("Part"); p.Name="WangZZZZ"; p.Size=Vector3.new(9,0.1,9)
-    p.Anchored=true; p.Transparency=1; p.Parent=workspace
-    RunService.RenderStepped:Connect(function() local t=GetTPS(); if t and p.Parent then p.Position=t.Position-Vector3.new(0,1,0) end end)
-    notify("ZZZZ","ON",true)
-end)
-
-mkSection(tHelpers,"Air Dribble Helper")
-mkSlider(tHelpers,"Air Dribble Size",1,15,1,1,function(v)
-    for _,c in ipairs(workspace:GetChildren()) do if c.Name=="WangAD" then c:Destroy() end end
-    local p=Instance.new("Part"); p.Name="WangAD"; p.Size=Vector3.new(v,0.1,v)
-    p.Anchored=true; p.Transparency=1; p.Parent=workspace
-    RunService.RenderStepped:Connect(function() local t=GetTPS(); if t and p.Parent then p.Position=t.Position-Vector3.new(0,1,0) end end)
-end)
-
-mkSection(tHelpers,"Inf Dribble (Mobile)")
-local followBall=false; local infGui2
-mkToggle(tHelpers,"Enable Inf Dribble","On-screen button to toggle ball-follow",false,function(v)
-    if infGui2 then infGui2:Destroy(); infGui2=nil end; followBall=false
-    if not v then return end
-    infGui2=Instance.new("ScreenGui"); infGui2.Name="WangInfDrib"
-    infGui2.ResetOnSpawn=false; infGui2.IgnoreGuiInset=true; infGui2.Parent=lplr.PlayerGui
-    local tb=Instance.new("TextButton"); tb.Size=UDim2.new(0,110,0,38)
-    tb.Position=UDim2.new(0,16,0.45,0); tb.Text="Inf Dribble: OFF"
-    tb.BackgroundColor3=ELEM; tb.TextColor3=TXT; tb.TextScaled=true
-    tb.BorderSizePixel=0; tb.Parent=infGui2; mkCorner(tb,8); mkDrag(tb)
-    tb.MouseButton1Click:Connect(function()
-        followBall=not followBall
-        tb.Text=followBall and "Inf Dribble: ON" or "Inf Dribble: OFF"
-        tb.BackgroundColor3=followBall and CON or ELEM
-    end)
-    RunService.RenderStepped:Connect(function()
-        if followBall then
-            local c=lplr.Character; local hum=c and c:FindFirstChildOfClass("Humanoid"); local TPS=GetTPS()
-            if hum and TPS then hum:MoveTo(TPS.Position) end
-        end
-    end)
-end)
-
--- ============================================================
--- ── GAMEPASS TAB ───────────────────────────────────────────
--- ============================================================
-local acLoop,atLoop
-mkSection(tGP,"Free Gamepasses")
-mkToggle(tGP,"More Curve",nil,false,function(state)
-    if acLoop then acLoop:Disconnect(); acLoop=nil end
-    pcall(function()
-        lplr.PlayerGui.Start.GamePassMenu.Items.WoodenFloor.Tick.Visible=state
-    end)
-    if state then
-        local hum=lplr.Character:WaitForChild("Humanoid")
-        acLoop=hum.AnimationPlayed:Connect(function(tr)
-            local names={"OldMKickL","OldMKick","OldLKickL","OldLKick","MKickL","MKick","LKickL","LKick","OldDribbleL","OldDribble","DribbleL","Dribble"}
-            if table.find(names,tr.Name) then
-                if(lplr.Character.HumanoidRootPart.Position-workspace.TPSSystem.TPS.Position).Magnitude<3.45 then
-                    local ev=workspace.FE.Actions.KickC1
-                    local A1,A2=workspace.TPSSystem.TPS,lplr.Character.HumanoidRootPart
-                    ev:FireServer(A1,A2); task.wait(0.2); ev:FireServer(A1,A2)
-                end
-            end
-        end)
-    end
-    notify("More Curve",state and "ON" or "OFF",state)
-end)
-mkToggle(tGP,"Blue Flame",nil,false,function(state)
-    if not state then return end
-    pcall(function()
-        local s=lplr.PlayerGui:WaitForChild("Start")
-        s.PowerShot.Flame.Image="rbxassetid://15316155280"
-        s.PowerShot.Flame.Flame.Image="rbxassetid://15316155280"
-        lplr.Backpack.FValue.Value=2
-        s.GamePassMenu.Items.BlueFlame.Tick.Visible=true
-    end)
-    notify("Blue Flame","ON",true)
-end)
-mkToggle(tGP,"Unlock Cooldown",nil,false,function(state)
-    if not state then return end
-    pcall(function()
-        local s=lplr.PlayerGui:WaitForChild("Start")
-        s.PowerShot.PowerValue.Value=30
-        s.GamePassMenu.Items.Cooldown.Tick.Visible=true
-    end)
-    notify("Cooldown","Unlocked",true)
-end)
-mkToggle(tGP,"Powerful Tackle",nil,false,function(state)
-    if atLoop then atLoop:Disconnect(); atLoop=nil end
-    pcall(function()
-        lplr.Backpack.TackleGamePass.Value=state
-        lplr.PlayerGui.Start.GamePassMenu.Items.RandomWeather.Tick.Visible=state
-    end)
-    if state then
-        local hum=lplr.Character:WaitForChild("Humanoid")
-        atLoop=hum.AnimationPlayed:Connect(function(tr)
-            if tr.Name:match("Tackle") then
-                if(lplr.Character.HumanoidRootPart.Position-workspace.TPSSystem.TPS.Position).Magnitude<4.87 then
-                    task.wait(0.8)
-                    workspace.FE.Actions.KickG1:FireServer(workspace.TPSSystem.TPS,lplr.Character.HumanoidRootPart,30,Vector3.new(4000000,700,4000000))
-                end
-            end
-        end)
-    end
-    notify("Powerful Tackle",state and "ON" or "OFF",state)
-end)
-
--- ============================================================
--- ── SETTINGS TAB ───────────────────────────────────────────
--- ============================================================
-mkSection(tSettings,"About")
-mkParagraph(tSettings,"Wang Script","Private | TPS Street Soccer\nBuilt for iPhone + Delta executor.\n\nDrag title bar to move UI.\n✕ to hide → tap ⚽ ball to reopen.")
-mkSection(tSettings,"Window Size")
-mkSlider(tSettings,"Width",260,420,340,10,function(v)
-    Win.Size=UDim2.new(0,v,0,Win.AbsoluteSize.Y)
-end)
-mkSlider(tSettings,"Height",360,650,500,10,function(v)
-    Win.Size=UDim2.new(0,Win.AbsoluteSize.X,0,v)
-end)
-mkSection(tSettings,"Transparency")
-mkSlider(tSettings,"UI Opacity",0,90,0,5,function(v)
-    Win.BackgroundTransparency=v/100
-end)
-
--- ============================================================
--- ── AUTO TAB  (everything runs itself — no mid-game pressing)
--- ============================================================
-local tAuto = mkTab("Auto", "🤖")
-
--- ── 1. Animation React ──────────────────────────────────────
--- Hooks Humanoid.AnimationPlayed and fires react in sync with
--- the actual kick/dribble animation so it fires at the exact
--- natural moment your foot would hit the ball.
-mkSection(tAuto, "Animation React")
-mkParagraph(tAuto, "How it works",
-    "Fires react when your kick or dribble animation plays AND the ball is close. Looks completely legit because it syncs with your real animation.")
+-- ── Animation React ────────────────────────────────────────
+mkSection(tReacts, "Animation React")
 
 local animReactOn   = false
 local animReactConn = nil
@@ -1321,7 +896,7 @@ local ANIM_NAMES = {
     "OldDribbleL","OldDribble","DribbleL","Dribble",
     "Header","Volley","VolleyL",
 }
-local ANIM_DIST = 5  -- only fire if ball is within this distance when anim plays
+local ANIM_DIST = 5
 
 local function hookAnimReact()
     if animReactConn then animReactConn:Disconnect(); animReactConn=nil end
@@ -1332,14 +907,13 @@ local function hookAnimReact()
         if not table.find(ANIM_NAMES, track.Name) then return end
         local TPS  = GetTPS(); if not TPS then return end
         local root = char:FindFirstChild("HumanoidRootPart"); if not root then return end
-        local dist = (root.Position - TPS.Position).Magnitude
-        if dist > ANIM_DIST then return end
+        -- hard distance check — must be physically close
+        if (root.Position - TPS.Position).Magnitude > ANIM_DIST then return end
         local limb = GetLimb(char, hum); if not limb then return end
-        -- small natural delay — waits for the swing frame
         task.delay(0.06 + math.random(0,4)*0.01, function()
             if not (limb.Parent and TPS.Parent) then return end
-            -- re-check distance after delay in case ball moved away
-            local t2=GetTPS(); if not t2 then return end
+            local t2 = GetTPS(); if not t2 then return end
+            -- re-check after delay
             if (root.Position - t2.Position).Magnitude > ANIM_DIST then return end
             firetouchinterest(limb, t2, 0)
             firetouchinterest(limb, t2, 1)
@@ -1347,30 +921,16 @@ local function hookAnimReact()
     end)
 end
 
--- re-hook on respawn
-lplr.CharacterAdded:Connect(function()
-    task.wait(0.5)
-    if animReactOn then hookAnimReact() end
-end)
-
-mkToggle(tAuto, "Animation React", "Fires react in sync with kick/dribble anims", false, function(v)
+mkToggle(tReacts, "Animation React", "Fires react when kick/dribble anim plays near ball", false, function(v)
     animReactOn = v
     if v then hookAnimReact() else
         if animReactConn then animReactConn:Disconnect(); animReactConn=nil end
     end
     notify("Anim React", v and "ON" or "OFF", v)
 end)
-mkSlider(tAuto, "Anim React Distance", 2, 8, 4, 1, function(v)
-    ANIM_DIST = v + 0.5
-end)
 
--- ── 2. Tackle React ─────────────────────────────────────────
--- Hooks tackle animations specifically and fires firetouchinterest
--- the moment your tackle swing hits — fixes tackles not registering
--- when ball collision is off.
-mkSection(tAuto, "Tackle React")
-mkParagraph(tAuto, "How it works",
-    "Fires react exactly when your tackle animation swings. Fixes tackles not registering when you have no collision. Turn this on and forget it.")
+-- ── Tackle React ───────────────────────────────────────────
+mkSection(tReacts, "Tackle React")
 
 local tackleReactOn   = false
 local tackleReactConn = nil
@@ -1378,9 +938,8 @@ local TACKLE_NAMES = {
     "Tackle","TackleL","TackleR","SlideTackle","SlideTackleL",
     "OldTackle","OldTackleL","OldTackleR","StandingTackle",
 }
-local TACKLE_DIST = 7  -- slightly larger than kick dist since tackle range is bigger
-
-local tackleInProgress = false  -- true while tackle anim is playing
+local TACKLE_DIST = 7
+local tackleInProgress = false
 
 local function hookTackleReact()
     if tackleReactConn then tackleReactConn:Disconnect(); tackleReactConn=nil end
@@ -1391,88 +950,51 @@ local function hookTackleReact()
         if not table.find(TACKLE_NAMES, track.Name) then return end
         local TPS  = GetTPS(); if not TPS then return end
         local root = char:FindFirstChild("HumanoidRootPart"); if not root then return end
-        local dist = (root.Position - TPS.Position).Magnitude
-        if dist > TACKLE_DIST then return end
+        if (root.Position - TPS.Position).Magnitude > TACKLE_DIST then return end
         local limb = GetLimb(char, hum); if not limb then return end
-
-        -- AUTO REACH OFF: pause reach for the duration of the tackle
+        -- pause reach during tackle
         local wasReachOn = reachOn
-        if wasReachOn then
-            reachOn = false
-            rebuildReach()  -- disconnects reach loop instantly
-        end
-
-        -- tackle swing delay
+        if wasReachOn then reachOn=false; rebuildReach() end
         task.delay(0.10 + math.random(0,5)*0.01, function()
             if not (limb.Parent and TPS.Parent) then
-                -- restore reach even if something went wrong
-                if wasReachOn then reachOn=true; rebuildReach() end
-                return
+                if wasReachOn then reachOn=true; rebuildReach() end; return
             end
             local t2 = GetTPS(); if not t2 then
-                if wasReachOn then reachOn=true; rebuildReach() end
-                return
+                if wasReachOn then reachOn=true; rebuildReach() end; return
             end
             if (root.Position - t2.Position).Magnitude > TACKLE_DIST then
-                if wasReachOn then reachOn=true; rebuildReach() end
-                return
+                if wasReachOn then reachOn=true; rebuildReach() end; return
             end
-            firetouchinterest(limb, t2, 0)
-            firetouchinterest(limb, t2, 1)
+            firetouchinterest(limb, t2, 0); firetouchinterest(limb, t2, 1)
             local hrp = char:FindFirstChild("HumanoidRootPart")
-            if hrp then
-                firetouchinterest(hrp, t2, 0)
-                firetouchinterest(hrp, t2, 1)
-            end
+            if hrp then firetouchinterest(hrp, t2, 0); firetouchinterest(hrp, t2, 1) end
         end)
-
-        -- restore reach after tackle animation finishes (~0.6s)
         task.delay(0.65, function()
-            if wasReachOn then
-                reachOn = true
-                rebuildReach()
-            end
+            if wasReachOn then reachOn=true; rebuildReach() end
         end)
-
-        -- hook track.Stopped as backup to restore reach early if anim ends sooner
         track.Stopped:Connect(function()
-            if wasReachOn and not reachOn then
-                reachOn = true
-                rebuildReach()
-            end
+            if wasReachOn and not reachOn then reachOn=true; rebuildReach() end
         end)
     end)
 end
 
-lplr.CharacterAdded:Connect(function()
-    task.wait(0.5)
-    if tackleReactOn then hookTackleReact() end
-end)
-
-mkToggle(tAuto, "Tackle React", "Fires react when tackle animation plays", false, function(v)
+mkToggle(tReacts, "Tackle React", "Fires react on tackle anim, reach auto-pauses", false, function(v)
     tackleReactOn = v
     if v then hookTackleReact() else
         if tackleReactConn then tackleReactConn:Disconnect(); tackleReactConn=nil end
     end
     notify("Tackle React", v and "ON" or "OFF", v)
 end)
-mkSlider(tAuto, "Tackle React Distance", 3, 12, 7, 1, function(v)
-    TACKLE_DIST = v
-end)
 
--- ── 3. Smart React ──────────────────────────────────────────
--- Only fires when the ball is actually moving TOWARDS you,
--- not when it's rolling away. Prevents false reacts.
-mkSection(tAuto, "Smart React")
-mkParagraph(tAuto, "How it works",
-    "Checks ball velocity direction. Only fires if the ball is coming toward you. Prevents wasted reacts on balls moving away.")
+-- ── Smart React ────────────────────────────────────────────
+mkSection(tReacts, "Smart React")
 
 local smartOn   = false
 local smartConn = nil
 local smartDist = 7
 local smartLastPos = nil
 
-mkToggle(tAuto, "Smart React", "Only reacts when ball is heading toward you", false, function(state)
+mkToggle(tReacts, "Smart React", "Only reacts when ball is heading toward you", false, function(state)
     smartOn = state
     if smartConn then smartConn:Disconnect(); smartConn=nil end
     if not state then notify("Smart React","OFF",false) return end
@@ -1485,260 +1007,49 @@ mkToggle(tAuto, "Smart React", "Only reacts when ball is heading toward you", fa
         local TPS = GetTPS(); if not TPS then return end
         local dist = (root.Position - TPS.Position).Magnitude
         if dist > smartDist then smartLastPos=nil; return end
-        -- check if ball is moving toward player using dot product
         local toPlayer = (root.Position - TPS.Position).Unit
         local ballVel  = TPS.AssemblyLinearVelocity
-        if ballVel.Magnitude < 0.5 then return end  -- ball barely moving, skip
-        local dot = toPlayer:Dot(ballVel.Unit)
-        if dot > 0.3 then  -- ball is heading toward player (positive dot = same direction)
+        if ballVel.Magnitude < 0.5 then return end
+        if toPlayer:Dot(ballVel.Unit) > 0.3 then
             doReact(c, hum, TPS)
         end
     end)
     notify("Smart React","ON",true)
 end)
-mkSlider(tAuto, "Smart React Distance", 3, 15, 7, 1, function(v) smartDist=v end)
 
--- ── 3. Auto Dribble ─────────────────────────────────────────
--- Fires dribble RemoteEvent automatically when ball is close.
--- Completely hands-free dribbling.
-mkSection(tAuto, "Auto Dribble")
-mkParagraph(tAuto, "How it works",
-    "Automatically fires the dribble remote when ball is near your feet. You just run, it dribbles for you.")
-
-local autoDribOn   = false
-local autoDribConn = nil
-local autoDribDist = 3.5
-local autoDribCooldown = 0.18
-local autoDribLast = 0
-
-mkToggle(tAuto, "Auto Dribble", "Dribbles automatically when ball is near", false, function(state)
-    autoDribOn = state
-    if autoDribConn then autoDribConn:Disconnect(); autoDribConn=nil end
-    if not state then notify("Auto Dribble","OFF",false) return end
-    autoDribConn = RunService.Heartbeat:Connect(function()
-        local now = tick()
-        if (now - autoDribLast) < autoDribCooldown then return end
-        local c    = lplr.Character
-        local root = c and c:FindFirstChild("HumanoidRootPart")
-        local hum  = c and c:FindFirstChildOfClass("Humanoid")
-        if not (c and root and hum) then return end
-        local TPS = GetTPS(); if not TPS then return end
-        if (root.Position - TPS.Position).Magnitude > autoDribDist then return end
-        autoDribLast = now
-        -- fire dribble remotes
-        local actions = workspace:FindFirstChild("FE") and workspace.FE:FindFirstChild("Actions")
-        if not actions then return end
-        local dribbleNames = {"Dribble","DribbleL"}
-        for _, name in ipairs(dribbleNames) do
-            local ev = actions:FindFirstChild(name)
-            if ev then
-                pcall(function()
-                    ev:FireServer(TPS, root)
-                end)
-            end
-        end
-    end)
-    notify("Auto Dribble","ON",true)
-end)
-mkSlider(tAuto, "Auto Dribble Distance", 2, 6, 3, 1, function(v) autoDribDist=v+0.5 end)
-mkSlider(tAuto, "Dribble Speed (×0.01s)", 10, 40, 18, 1, function(v) autoDribCooldown=v*0.01 end)
-
--- ── 4. Auto Tackle ──────────────────────────────────────────
--- Detects nearest opponent with the ball and fires tackle remote.
-mkSection(tAuto, "Auto Tackle")
-mkParagraph(tAuto, "How it works",
-    "Automatically fires tackle when an opponent is close to you and has the ball. Enable it and just run at people.")
-
-local autoTackleOn   = false
-local autoTackleConn = nil
-local autoTackleDist = 5
-local autoTackleLast = 0
-local autoTackleCooldown = 1.2  -- tackle has a real cooldown in-game
-
-mkToggle(tAuto, "Auto Tackle", "Auto tackles opponents near the ball", false, function(state)
-    autoTackleOn = state
-    if autoTackleConn then autoTackleConn:Disconnect(); autoTackleConn=nil end
-    if not state then notify("Auto Tackle","OFF",false) return end
-    autoTackleConn = RunService.Heartbeat:Connect(function()
-        local now = tick()
-        if (now - autoTackleLast) < autoTackleCooldown then return end
-        local c    = lplr.Character
-        local root = c and c:FindFirstChild("HumanoidRootPart")
-        if not (c and root) then return end
-        local TPS = GetTPS(); if not TPS then return end
-        -- find closest opponent near the ball
-        local closest, closestDist = nil, autoTackleDist
-        for _, p in ipairs(Players:GetPlayers()) do
-            if p == lplr then continue end
-            local pc = p.Character
-            local pr = pc and pc:FindFirstChild("HumanoidRootPart")
-            if not pr then continue end
-            -- check opponent is close to ball AND close to us
-            local oppToBall = (pr.Position - TPS.Position).Magnitude
-            local oppToMe   = (root.Position - pr.Position).Magnitude
-            if oppToBall < 4 and oppToMe < closestDist then
-                closestDist = oppToMe
-                closest = pc
-            end
-        end
-        if not closest then return end
-        autoTackleLast = now
-        local actions = workspace:FindFirstChild("FE") and workspace.FE:FindFirstChild("Actions")
-        if not actions then return end
-        local ev = actions:FindFirstChild("Tackle")
-        if ev then pcall(function() ev:FireServer(TPS, root) end) end
-    end)
-    notify("Auto Tackle","ON",true)
-end)
-mkSlider(tAuto, "Tackle Range", 3, 10, 5, 1, function(v) autoTackleDist=v end)
-
--- ── 5. Auto Anti-AFK ────────────────────────────────────────
-mkSection(tAuto, "Anti-AFK")
-mkParagraph(tAuto, "Anti-AFK",
-    "Randomly moves your character every 2 minutes so you never get kicked for being idle.")
+-- ── Anti-AFK ───────────────────────────────────────────────
+mkSection(tReacts, "Anti-AFK")
 
 local antiAfkOn   = false
 local antiAfkTask = nil
 
-mkToggle(tAuto, "Anti-AFK", "Prevents idle kick automatically", false, function(state)
+mkToggle(tReacts, "Anti-AFK", "Tiny nudge every 2 min so you never get idle kicked", false, function(state)
     antiAfkOn = state
     if antiAfkTask then task.cancel(antiAfkTask); antiAfkTask=nil end
     if not state then notify("Anti-AFK","OFF",false) return end
     antiAfkTask = task.spawn(function()
         while antiAfkOn do
-            task.wait(110 + math.random(0,20))  -- every ~2 min with jitter
+            task.wait(110 + math.random(0,20))
             if not antiAfkOn then break end
             local c   = lplr.Character
             local hum = c and c:FindFirstChildOfClass("Humanoid")
             local root= c and c:FindFirstChild("HumanoidRootPart")
             if hum and root then
-                -- tiny nudge that's basically invisible
-                local offset = Vector3.new(math.random(-1,1)*0.3, 0, math.random(-1,1)*0.3)
-                hum:MoveTo(root.Position + offset)
+                hum:MoveTo(root.Position + Vector3.new(math.random(-1,1)*0.3, 0, math.random(-1,1)*0.3))
             end
         end
     end)
-    notify("Anti-AFK","ON — auto",true)
+    notify("Anti-AFK","ON",true)
 end)
 
--- ── 6. Auto Leg Reset on Respawn ────────────────────────────
--- If you're using leg size reach, this auto-reapplies it
--- after you respawn so you don't have to manually re-enter the size.
-mkSection(tAuto, "Auto Respawn Fix")
-mkParagraph(tAuto, "Auto Respawn Fix",
-    "Remembers your reach/leg settings and automatically reapplies them when you respawn. No need to re-enter anything.")
 
-local autoRespawnOn  = false
-local savedLegSize   = 3
-local savedRigType   = nil
-
-mkToggle(tAuto, "Auto Respawn Fix", "Reapplies leg size after every respawn", false, function(state)
-    autoRespawnOn = state
-    notify("Respawn Fix", state and "ON" or "OFF", state)
-end)
-mkSlider(tAuto, "Saved Leg Size", 1, 10, 3, 1, function(v) savedLegSize=v end)
-
-lplr.CharacterAdded:Connect(function(char)
-    task.wait(0.8)  -- wait for character to fully load
-    if not autoRespawnOn then return end
-    local hum = char:FindFirstChildOfClass("Humanoid")
-    if not hum then return end
-    if hum.RigType == Enum.HumanoidRigType.R6 then
-        for _, nm in ipairs({"Right Leg","Left Leg"}) do
-            local p = char:FindFirstChild(nm)
-            if p then p.Size=Vector3.new(savedLegSize,2,savedLegSize); p.CanCollide=false end
-        end
-    else
-        for _, nm in ipairs({"RightLowerLeg","LeftLowerLeg"}) do
-            local p = char:FindFirstChild(nm)
-            if p then p.Size=Vector3.new(savedLegSize,2,savedLegSize); p.CanCollide=false end
-        end
-    end
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    if hrp then hrp.Size=Vector3.new(savedLegSize,2,savedLegSize); hrp.CanCollide=false end
-    -- also re-hook animation react
+-- respawn hook — re-hooks all animation reacts automatically, no toggle needed
+lplr.CharacterAdded:Connect(function()
+    task.wait(0.5)
     if animReactOn then hookAnimReact() end
-    notify("Respawn Fix","Legs restored!",true)
+    if tackleReactOn then hookTackleReact() end
 end)
 
--- ── 7. Auto Power Shot ──────────────────────────────────────
--- Fires power shot remote at the right moment when ball
--- is in shooting range and you're facing goal direction.
-mkSection(tAuto, "Auto Power Shot")
-mkParagraph(tAuto, "How it works",
-    "Fires power shot when ball is within range. Enable before shooting runs. Does NOT spam — fires once per cooldown.")
-
-local autoPSOn   = false
-local autoPSConn = nil
-local autoPSDist = 5
-local autoPSLast = 0
-local autoPSCooldown = 2.5
-
-mkToggle(tAuto, "Auto Power Shot", "Fires power shot when ball is close", false, function(state)
-    autoPSOn = state
-    if autoPSConn then autoPSConn:Disconnect(); autoPSConn=nil end
-    if not state then notify("Auto PS","OFF",false) return end
-    autoPSConn = RunService.Heartbeat:Connect(function()
-        local now = tick()
-        if (now - autoPSLast) < autoPSCooldown then return end
-        local c    = lplr.Character
-        local root = c and c:FindFirstChild("HumanoidRootPart")
-        if not (c and root) then return end
-        local TPS = GetTPS(); if not TPS then return end
-        if (root.Position - TPS.Position).Magnitude > autoPSDist then return end
-        autoPSLast = now
-        local actions = workspace:FindFirstChild("FE") and workspace.FE:FindFirstChild("Actions")
-        if not actions then return end
-        -- try common power shot remote names
-        for _, name in ipairs({"KickPS","KickG1","PowerShot"}) do
-            local ev = actions:FindFirstChild(name)
-            if ev then
-                pcall(function()
-                    ev:FireServer(TPS, root, 30, Vector3.new(0,0,0))
-                end)
-                break
-            end
-        end
-    end)
-    notify("Auto PS","ON",true)
-end)
-mkSlider(tAuto, "Power Shot Distance", 2, 10, 5, 1, function(v) autoPSDist=v end)
-mkSlider(tAuto, "Power Shot Cooldown (s)", 1, 8, 3, 1, function(v) autoPSCooldown=v*0.8 end)
-
--- ── 8. Ball Magnet ──────────────────────────────────────────
--- Gently moves ball toward your feet using CFrame nudging.
--- Much more subtle than full teleport — looks natural.
-mkSection(tAuto, "Ball Magnet")
-mkParagraph(tAuto, "Ball Magnet",
-    "Slowly pulls the ball toward your feet each frame. Subtle — won't snap the ball across the map.")
-
-local magnetOn   = false
-local magnetConn = nil
-local magnetStr  = 0.08  -- how strong the pull is (0.01 = barely, 0.2 = strong)
-
-mkToggle(tAuto, "Ball Magnet", "Gently pulls ball toward your feet", false, function(state)
-    magnetOn = state
-    if magnetConn then magnetConn:Disconnect(); magnetConn=nil end
-    if not state then notify("Magnet","OFF",false) return end
-    magnetConn = RunService.Heartbeat:Connect(function()
-        local c    = lplr.Character
-        local root = c and c:FindFirstChild("HumanoidRootPart")
-        if not (c and root) then return end
-        local TPS = GetTPS(); if not TPS then return end
-        local dist = (root.Position - TPS.Position).Magnitude
-        if dist > 18 or dist < 1.5 then return end  -- don't pull from too far or if already at feet
-        -- lerp ball position gently toward player feet
-        local targetPos = root.Position + Vector3.new(0,-2.5,0) + (root.CFrame.LookVector * 1.5)
-        TPS.CFrame = TPS.CFrame:Lerp(CFrame.new(targetPos), magnetStr)
-    end)
-    notify("Magnet","ON",true)
-end)
-mkSlider(tAuto, "Magnet Strength", 1, 20, 8, 1, function(v) magnetStr=v*0.01 end)
-
--- sort the Auto tab into position (insert before Settings in strip)
--- just reorder button visually
-tAuto.btn.LayoutOrder = 9
-tSettings.btn.LayoutOrder = 10
 
 -- ============================================================
 -- DONE
