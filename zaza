@@ -638,7 +638,6 @@ end
 local tReach    = mkTab("Reach",    "🦵")
 local tMoss     = mkTab("Mossing",  "🙋")
 local tReacts   = mkTab("Reacts",   "⚡")
-local tPlayer   = mkTab("Player",   "👤")
 local tPerf     = mkTab("Perf",     "📶")
 local tSettings = mkTab("Settings", "⚙️")
 
@@ -756,11 +755,8 @@ mkToggle(tMoss,"Appear Normal (invisible box)",nil,false,function(v)
     headTrans=v and 1 or 0.5; if headPart then headPart.Transparency=headTrans end
 end)
 mkSection(tMoss,"Box Size")
-mkSlider(tMoss,"X Size",0,50,1,1,function(v) headSize=Vector3.new(v,headSize.Y,headSize.Z); if headOn then rebuildHead() end end)
-mkSlider(tMoss,"Y Size",0,50,1,1,function(v) headSize=Vector3.new(headSize.X,v,headSize.Z); if headOn then rebuildHead() end end)
-mkSlider(tMoss,"Z Size",0,50,1,1,function(v) headSize=Vector3.new(headSize.X,headSize.Y,v); if headOn then rebuildHead() end end)
-mkSection(tMoss,"Moss Presets")
-for _,pct in ipairs({25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,100}) do
+mkSection(tMoss,"Presets (25–50% look legit)")
+for _,pct in ipairs({25,30,35,40,45,50}) do
     mkButton(tMoss,"Moss "..pct.."%",function()
         local s=pct*0.2; headSize=Vector3.new(s,headSize.Y,s)
         if headOn then rebuildHead() end; notify("Moss",pct.."%",true)
@@ -772,8 +768,7 @@ end
 -- ============================================================
 local rcColConn; local rcFollower
 local rcAutoConn; local rcAutoOn=false; local rcAutoDist=4
-local rcTouchConn; local rcPredConn; local rcPredOn=false; local rcPredDist=10
-local rcGKHooked=false; local mobileReactGui
+local rcTouchConn
 
 -- Shared cooldown system — one cooldown across ALL react methods
 -- so only ONE react fires per cooldown window, looking legit
