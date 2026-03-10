@@ -1040,6 +1040,82 @@ lplr.CharacterAdded:Connect(function()
     if tackleReactOn then hookTackleReact() end
 end)
 
+-- ============================================================
+-- ── PERF TAB ───────────────────────────────────────────────
+-- ============================================================
+mkSection(tPerf, "Performance")
+
+mkButton(tPerf, "Unlock FPS", function()
+    setfpscap(10000)
+    notify("FPS", "Uncapped!", true)
+end)
+
+mkToggle(tPerf, "FPS Boost", "Removes shadows, particles and heavy effects", false, function(state)
+    for _, v in pairs(workspace:GetDescendants()) do
+        if v:IsA("BasePart") and not v:IsDescendantOf(lplr.Character or Instance.new("Folder")) then
+            local tps = GetTPS()
+            if tps and v == tps then continue end
+            if state then
+                v.Material = Enum.Material.SmoothPlastic
+                v.CastShadow = false
+            end
+        end
+        if state then
+            if v:IsA("ParticleEmitter") or v:IsA("Smoke") or v:IsA("Fire") or v:IsA("Sparkles") then
+                v.Enabled = false
+            end
+            if v:IsA("PointLight") or v:IsA("SurfaceLight") or v:IsA("SpotLight") then
+                v.Enabled = false
+            end
+        end
+    end
+    if state then
+        game:GetService("Lighting").GlobalShadows = false
+        game:GetService("Lighting").FogEnd = 100000
+    else
+        game:GetService("Lighting").GlobalShadows = true
+    end
+    notify("FPS Boost", state and "ON" or "OFF", state)
+end)
+
+local fpsConn
+mkToggle(tPerf, "FPS Counter", "Shows your current FPS", false, function(state)
+    if fpsConn then fpsConn:Disconnect(); fpsConn = nil end
+    if not state then notify("FPS", "Counter OFF", false) return end
+    local last = tick(); local frames = 0
+    fpsConn = RunService.RenderStepped:Connect(function()
+        frames = frames + 1
+        if tick() - last >= 1 then
+            notify("FPS", "FPS: "..frames, true)
+            frames = 0; last = tick()
+        end
+    end)
+end)
+
+mkToggle(tPerf, "Fake Ping", "Shows 0ms ping in scoreboard", false, function(state)
+    if state then
+        game:GetService("Stats").Network.ServerStatsItem["Data Ping"]:SetValue(0)
+    end
+    notify("Ping", state and "Faked to 0ms" or "OFF", state)
+end)
+
+-- ============================================================
+-- ── SETTINGS TAB ───────────────────────────────────────────
+-- ============================================================
+mkSection(tSettings, "About")
+mkParagraph(tSettings, "Wang Script", "Private | TPS Street Soccer\nBuilt for iPhone + Delta executor.\n\nDrag title bar to move UI.\n✕ to hide → tap ⚽ ball to reopen.")
+mkSection(tSettings, "Window Size")
+mkSlider(tSettings, "Width", 260, 420, 340, 10, function(v)
+    Win.Size = UDim2.new(0, v, 0, Win.AbsoluteSize.Y)
+end)
+mkSlider(tSettings, "Height", 360, 650, 500, 10, function(v)
+    Win.Size = UDim2.new(0, Win.AbsoluteSize.X, 0, v)
+end)
+mkSection(tSettings, "Transparency")
+mkSlider(tSettings, "UI Opacity", 0, 90, 0, 5, function(v)
+    Win.BackgroundTransparency = v / 100
+end)
+
 
 -- ============================================================
 -- DONE
