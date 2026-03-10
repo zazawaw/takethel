@@ -844,7 +844,7 @@ mkToggle(tReacts,"Enable Touch React","Fires on physical ball contact",false,fun
         local root=c:FindFirstChild("HumanoidRootPart"); if not root then return end
         -- HARD distance check — ball must physically be close, not just a fake touch from far
         local dist=(root.Position - t.Position).Magnitude
-        if dist > 7 then return end  -- ignore if ball is more than 7 studs away
+        if dist > 6 then return end  -- cap slightly above reach dist so it always catches natural touches
         doReact(c, hum, t)
     end)
     notify("Touch React","ON",true)
@@ -939,7 +939,8 @@ local function hookTackleReact()
         -- pause reach during tackle
         local wasReachOn = reachOn
         if wasReachOn then reachOn=false; rebuildReach() end
-        task.delay(0.10 + math.random(0,5)*0.01, function()
+        -- wait 2 frames so reach loop fully stops before firing
+        task.delay(0.18 + math.random(0,5)*0.01, function()
             if not (limb.Parent and TPS.Parent) then
                 if wasReachOn then reachOn=true; rebuildReach() end; return
             end
@@ -986,7 +987,7 @@ mkToggle(tReacts, "Smart React", "Only reacts when ball is heading toward you", 
         if not (c and root and hum) then return end
         local TPS = GetTPS(); if not TPS then return end
         local dist = (root.Position - TPS.Position).Magnitude
-        if dist > smartDist then smartLastPos=nil; return end
+        if dist > smartDist then return end
         local toPlayer = (root.Position - TPS.Position).Unit
         local ballVel  = TPS.AssemblyLinearVelocity
         if ballVel.Magnitude < 0.5 then return end
