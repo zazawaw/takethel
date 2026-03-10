@@ -640,8 +640,6 @@ local tMoss     = mkTab("Mossing",  "🙋")
 local tReacts   = mkTab("Reacts",   "⚡")
 local tPlayer   = mkTab("Player",   "👤")
 local tPerf     = mkTab("Perf",     "📶")
-local tHelpers  = mkTab("Helpers",  "🎯")
-local tGP       = mkTab("GP",       "💎")
 local tSettings = mkTab("Settings", "⚙️")
 
 -- Open first tab immediately (proper call, not :Fire())
@@ -773,7 +771,7 @@ end
 -- ── REACTS TAB ─────────────────────────────────────────────
 -- ============================================================
 local rcColConn; local rcFollower
-local rcAutoConn; local rcAutoOn=false; local rcAutoDist=6
+local rcAutoConn; local rcAutoOn=false; local rcAutoDist=4
 local rcTouchConn; local rcPredConn; local rcPredOn=false; local rcPredDist=10
 local rcGKHooked=false; local mobileReactGui
 
@@ -835,13 +833,6 @@ mkButton(tReacts,"Remove Ball Constraints",function()
     notify("Ball Delay","Constraints removed",true)
 end)
 
--- ── React Cooldown Slider ──────────────────────────────────
-mkSection(tReacts,"React Settings")
-mkParagraph(tReacts,"Cooldown","Controls how often reacts fire. Lower = faster reacts. Higher = looks more legit. All react methods share this.")
-mkSlider(tReacts,"React Cooldown (×0.05s)",1,20,7,1,function(v)
-    RC_COOLDOWN = v * 0.05
-end)
-
 -- ── Touch React (fixed — cooldown, no spam) ───────────────
 mkSection(tReacts,"Touch React")
 mkParagraph(tReacts,"Touch React","Fires ONCE when ball touches your character. Cooldown prevents spam & lag. Best overall react for mobile.")
@@ -883,7 +874,6 @@ mkToggle(tReacts,"Enable Auto React","Fires when ball is within distance",false,
     end)
     notify("Auto React","ON",true)
 end)
-mkSlider(tReacts,"Auto React Distance",2,10,6,1,function(v) rcAutoDist=v end)
 
 -- ── Animation React ────────────────────────────────────────
 mkSection(tReacts, "Animation React")
@@ -896,7 +886,7 @@ local ANIM_NAMES = {
     "OldDribbleL","OldDribble","DribbleL","Dribble",
     "Header","Volley","VolleyL",
 }
-local ANIM_DIST = 5
+local ANIM_DIST = 4
 
 local function hookAnimReact()
     if animReactConn then animReactConn:Disconnect(); animReactConn=nil end
@@ -905,6 +895,7 @@ local function hookAnimReact()
     local hum  = char:FindFirstChildOfClass("Humanoid"); if not hum then return end
     animReactConn = hum.AnimationPlayed:Connect(function(track)
         if not table.find(ANIM_NAMES, track.Name) then return end
+        if not canFireReact() then return end  -- respect shared cooldown
         local TPS  = GetTPS(); if not TPS then return end
         local root = char:FindFirstChild("HumanoidRootPart"); if not root then return end
         -- hard distance check — must be physically close
@@ -939,8 +930,6 @@ local TACKLE_NAMES = {
     "OldTackle","OldTackleL","OldTackleR","StandingTackle",
 }
 local TACKLE_DIST = 7
-local tackleInProgress = false
-
 local function hookTackleReact()
     if tackleReactConn then tackleReactConn:Disconnect(); tackleReactConn=nil end
     if not tackleReactOn then return end
@@ -992,8 +981,6 @@ mkSection(tReacts, "Smart React")
 local smartOn   = false
 local smartConn = nil
 local smartDist = 7
-local smartLastPos = nil
-
 mkToggle(tReacts, "Smart React", "Only reacts when ball is heading toward you", false, function(state)
     smartOn = state
     if smartConn then smartConn:Disconnect(); smartConn=nil end
