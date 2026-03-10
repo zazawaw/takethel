@@ -642,7 +642,6 @@ local tReacts   = mkTab("Reacts",   "⚡")
 local tPlayer   = mkTab("Player",   "👤")
 local tPerf     = mkTab("Perf",     "📶")
 local tHelpers  = mkTab("Helpers",  "🎯")
-local tBall     = mkTab("Ball",     "⚽")
 local tGP       = mkTab("GP",       "💎")
 local tSettings = mkTab("Settings", "⚙️")
 
@@ -890,11 +889,15 @@ mkToggle(tReacts,"Enable Touch React","Fires on physical ball contact",false,fun
     if not state then notify("Touch React","OFF",false) return end
     local TPS=GetTPS(); if not TPS then notify("Reacts","Ball not found",false) return end
     rcTouchConn=TPS.Touched:Connect(function(hit)
-        -- only fire if ball touched OUR character, and only if we can react
         local c=lplr.Character; if not c then return end
+        -- must be our character part that got touched
         if not hit:IsDescendantOf(c) then return end
         local hum=c:FindFirstChildOfClass("Humanoid"); if not hum then return end
         local t=GetTPS(); if not t then return end
+        local root=c:FindFirstChild("HumanoidRootPart"); if not root then return end
+        -- HARD distance check — ball must physically be close, not just a fake touch from far
+        local dist=(root.Position - t.Position).Magnitude
+        if dist > 7 then return end  -- ignore if ball is more than 7 studs away
         doReact(c, hum, t)
     end)
     notify("Touch React","ON",true)
@@ -1213,74 +1216,6 @@ mkToggle(tHelpers,"Enable Inf Dribble","On-screen button to toggle ball-follow",
             if hum and TPS then hum:MoveTo(TPS.Position) end
         end
     end)
-end)
-
--- ============================================================
--- ── BALL TAB ───────────────────────────────────────────────
--- ============================================================
-mkSection(tBall,"Ball Modifications")
-mkInput(tBall,"Ball Size","e.g. 2.6",function(v)
-    local n=tonumber(v); if not n then return end
-    local TPS=GetTPS(); if TPS then TPS.Size=Vector3.new(n,n,n); notify("Ball","Size → "..v,true) end
-end)
-mkButton(tBall,"Anti-Ball Fling",function()
-    RunService.Stepped:Connect(function()
-        local c=lplr.Character; if not c then return end
-        for _,p in pairs(c:GetDescendants()) do
-            if p:IsA("BasePart") and p.CanCollide and
-              (p.Name=="Right Leg" or p.Name=="Right Arm" or p.Name=="Left Arm" or p.Name=="Torso") then
-                p.CanCollide=false
-            end
-        end
-    end)
-    notify("Anti Fling","ON",true)
-end)
-
-mkSection(tBall,"Ball Prediction Trail")
-local predConn2; local predParts2={}; local lineParts2={}
-mkToggle(tBall,"Show Prediction Trail","Draws ball trajectory line",false,function(state)
-    if predConn2 then predConn2:Disconnect(); predConn2=nil end
-    for _,p in pairs(predParts2) do if p and p.Parent then p.Transparency=1 end end
-    for _,p in pairs(lineParts2) do if p and p.Parent then p.Transparency=1 end end
-    if not state then return end
-    local g=workspace.Gravity or 196.2
-    predConn2=RunService.Heartbeat:Connect(function()
-        local TPS=GetTPS(); if not TPS then return end
-        local sp,sv=TPS.Position,TPS.Velocity
-        for i=1,10 do
-            local t2=i*0.05; local pp=sp+sv*t2+Vector3.new(0,-0.5*g*t2*t2,0)
-            if not predParts2[i] then
-                local d=Instance.new("Part"); d.Anchored=true; d.CanCollide=false
-                d.Size=Vector3.new(0.3,0.3,0.3); d.Material=Enum.Material.Neon
-                d.Color=ACCENT; d.CastShadow=false; d.Parent=workspace; predParts2[i]=d
-            end
-            predParts2[i].CFrame=CFrame.new(pp); predParts2[i].Transparency=0.4
-        end
-    end)
-    notify("Prediction","Trail ON",true)
-end)
-
-mkSection(tBall,"Ball Texture")
-mkDropdown(tBall,"Texture",{"Default","Adidas Brazuca","Adidas Jabulani"},function(v)
-    local TPS=GetTPS(); if not TPS then return end
-    local tex={
-        Default={d1="1731401359",d2="1731401359",d3="1731401811",d4="1731401811",d5="1731401359",d6="1731401359"},
-        ["Adidas Brazuca"]={d1="137668136",d2="137668129",d3="137668136",d4="137668136",d5="137668136",d6="137668136"},
-        ["Adidas Jabulani"]={d1="76614961",d2="76614961",d3="76614961",d4="76614961",d5="76614961",d6="76614961"},
-    }
-    local t2=tex[v]; if not t2 then return end
-    for i=1,6 do local d=TPS:FindFirstChild("Decal"..i); if d then d.Texture="rbxassetid://"..t2["d"..i] end end
-    notify("Texture",v,true)
-end)
-
-mkSection(tBall,"Ball Sound")
-mkDropdown(tBall,"Sound",{"Default","OOF !","Neverloose","Rust","Bruh"},function(v)
-    local TPS=GetTPS(); if not TPS then return end
-    local snd=TPS:FindFirstChild("Sound"); if not snd then return end
-    local sids={Default="2516069845",["OOF !"]="5143383166",Neverloose="6607204501",Rust="1255040462",Bruh="4275842574"}
-    snd.SoundId="rbxassetid://"..sids[v]
-    snd.PlaybackSpeed=v=="OOF !" and 1 or 0.7; snd.Volume=v=="OOF !" and 2 or 0.7
-    notify("Sound",v,true)
 end)
 
 -- ============================================================
@@ -1652,7 +1587,7 @@ local ANIM_NAMES = {
     "OldDribbleL","OldDribble","DribbleL","Dribble",
     "Header","Volley","VolleyL",
 }
-local ANIM_DIST = 4.5  -- only fire if ball is within this distance when anim plays
+local ANIM_DIST = 5  -- only fire if ball is within this distance when anim plays
 
 local function hookAnimReact()
     if animReactConn then animReactConn:Disconnect(); animReactConn=nil end
@@ -1669,8 +1604,11 @@ local function hookAnimReact()
         -- small natural delay — waits for the swing frame
         task.delay(0.06 + math.random(0,4)*0.01, function()
             if not (limb.Parent and TPS.Parent) then return end
-            firetouchinterest(limb, TPS, 0)
-            firetouchinterest(limb, TPS, 1)
+            -- re-check distance after delay in case ball moved away
+            local t2=GetTPS(); if not t2 then return end
+            if (root.Position - t2.Position).Magnitude > ANIM_DIST then return end
+            firetouchinterest(limb, t2, 0)
+            firetouchinterest(limb, t2, 1)
         end)
     end)
 end
@@ -1692,7 +1630,103 @@ mkSlider(tAuto, "Anim React Distance", 2, 8, 4, 1, function(v)
     ANIM_DIST = v + 0.5
 end)
 
--- ── 2. Smart React ──────────────────────────────────────────
+-- ── 2. Tackle React ─────────────────────────────────────────
+-- Hooks tackle animations specifically and fires firetouchinterest
+-- the moment your tackle swing hits — fixes tackles not registering
+-- when ball collision is off.
+mkSection(tAuto, "Tackle React")
+mkParagraph(tAuto, "How it works",
+    "Fires react exactly when your tackle animation swings. Fixes tackles not registering when you have no collision. Turn this on and forget it.")
+
+local tackleReactOn   = false
+local tackleReactConn = nil
+local TACKLE_NAMES = {
+    "Tackle","TackleL","TackleR","SlideTackle","SlideTackleL",
+    "OldTackle","OldTackleL","OldTackleR","StandingTackle",
+}
+local TACKLE_DIST = 7  -- slightly larger than kick dist since tackle range is bigger
+
+local tackleInProgress = false  -- true while tackle anim is playing
+
+local function hookTackleReact()
+    if tackleReactConn then tackleReactConn:Disconnect(); tackleReactConn=nil end
+    if not tackleReactOn then return end
+    local char = lplr.Character; if not char then return end
+    local hum  = char:FindFirstChildOfClass("Humanoid"); if not hum then return end
+    tackleReactConn = hum.AnimationPlayed:Connect(function(track)
+        if not table.find(TACKLE_NAMES, track.Name) then return end
+        local TPS  = GetTPS(); if not TPS then return end
+        local root = char:FindFirstChild("HumanoidRootPart"); if not root then return end
+        local dist = (root.Position - TPS.Position).Magnitude
+        if dist > TACKLE_DIST then return end
+        local limb = GetLimb(char, hum); if not limb then return end
+
+        -- AUTO REACH OFF: pause reach for the duration of the tackle
+        local wasReachOn = reachOn
+        if wasReachOn then
+            reachOn = false
+            rebuildReach()  -- disconnects reach loop instantly
+        end
+
+        -- tackle swing delay
+        task.delay(0.10 + math.random(0,5)*0.01, function()
+            if not (limb.Parent and TPS.Parent) then
+                -- restore reach even if something went wrong
+                if wasReachOn then reachOn=true; rebuildReach() end
+                return
+            end
+            local t2 = GetTPS(); if not t2 then
+                if wasReachOn then reachOn=true; rebuildReach() end
+                return
+            end
+            if (root.Position - t2.Position).Magnitude > TACKLE_DIST then
+                if wasReachOn then reachOn=true; rebuildReach() end
+                return
+            end
+            firetouchinterest(limb, t2, 0)
+            firetouchinterest(limb, t2, 1)
+            local hrp = char:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                firetouchinterest(hrp, t2, 0)
+                firetouchinterest(hrp, t2, 1)
+            end
+        end)
+
+        -- restore reach after tackle animation finishes (~0.6s)
+        task.delay(0.65, function()
+            if wasReachOn then
+                reachOn = true
+                rebuildReach()
+            end
+        end)
+
+        -- hook track.Stopped as backup to restore reach early if anim ends sooner
+        track.Stopped:Connect(function()
+            if wasReachOn and not reachOn then
+                reachOn = true
+                rebuildReach()
+            end
+        end)
+    end)
+end
+
+lplr.CharacterAdded:Connect(function()
+    task.wait(0.5)
+    if tackleReactOn then hookTackleReact() end
+end)
+
+mkToggle(tAuto, "Tackle React", "Fires react when tackle animation plays", false, function(v)
+    tackleReactOn = v
+    if v then hookTackleReact() else
+        if tackleReactConn then tackleReactConn:Disconnect(); tackleReactConn=nil end
+    end
+    notify("Tackle React", v and "ON" or "OFF", v)
+end)
+mkSlider(tAuto, "Tackle React Distance", 3, 12, 7, 1, function(v)
+    TACKLE_DIST = v
+end)
+
+-- ── 3. Smart React ──────────────────────────────────────────
 -- Only fires when the ball is actually moving TOWARDS you,
 -- not when it's rolling away. Prevents false reacts.
 mkSection(tAuto, "Smart React")
