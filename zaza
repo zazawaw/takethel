@@ -958,6 +958,11 @@ local function hookTackleReact()
                 tackling = false; return
             end
             firetouchinterest(limb, t2, 0); firetouchinterest(limb, t2, 1)
+            -- also fire from head during tackle for extra coverage
+            local head = char:FindFirstChild("Head")
+            if head then
+                firetouchinterest(head, t2, 0); firetouchinterest(head, t2, 1)
+            end
         end)
         task.delay(0.65, function()
             if wasReachOn then reachOn=true; rebuildReach() end
