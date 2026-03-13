@@ -55,7 +55,6 @@ local function mkStroke(p, col, thick)
     s.Color = col or ACCENT
     s.Thickness = thick or 1
     s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-    s.Parent = s
     s.Parent = p
 end
 
@@ -640,7 +639,7 @@ mkSection(tReach,"Reach (FireTouchInterest)")
 mkToggle(tReach,"Enable Reach","Fires touch on ball when in range",false,function(v)
     reachOn=v; updateReachGate(); rebuildReach(); notify("Reach",v and "ON" or "OFF",v)
 end)
-mkSlider(tReach,"Reach Distance",1,15,1,0.5,function(v) reachDist=v; rebuildReach() end)
+mkSlider(tReach,"Reach Distance",1,8,1,0.1,function(v) reachDist=v; rebuildReach() end)
 
 mkSection(tReach,"Leg Size Reach")
 mkInput(tReach,"Leg Size R6","e.g. 3",function(v)
@@ -649,7 +648,6 @@ mkInput(tReach,"Leg Size R6","e.g. 3",function(v)
     for _,nm in ipairs({"Right Leg","Left Leg"}) do
         local p=c:FindFirstChild(nm); if p then p.Size=Vector3.new(n,2,n); p.CanCollide=false end
     end
-    local h=c:FindFirstChild("HumanoidRootPart"); if h then h.Size=Vector3.new(n,2,n); h.CanCollide=false end
     notify("R6 Legs","Size → "..v,true)
 end)
 mkInput(tReach,"Leg Size R15","e.g. 3",function(v)
@@ -658,44 +656,15 @@ mkInput(tReach,"Leg Size R15","e.g. 3",function(v)
     for _,nm in ipairs({"RightLowerLeg","LeftLowerLeg"}) do
         local p=c:FindFirstChild(nm); if p then p.Size=Vector3.new(n,2,n); p.CanCollide=false end
     end
-    local h=c:FindFirstChild("HumanoidRootPart"); if h then h.Size=Vector3.new(n,2,n); h.CanCollide=false end
     notify("R15 Legs","Size → "..v,true)
 end)
 
-mkSection(tReach,"Fake Legs (Look Normal)")
-mkButton(tReach,"Apply Fake Legs",function()
-    local c=lplr.Character; if not c then return end
-    local hum=c:FindFirstChildOfClass("Humanoid"); if not hum then return end
-    if hum.RigType==Enum.HumanoidRigType.R6 then
-        c["Right Leg"].Transparency=1; c["Left Leg"].Transparency=1
-        for _,side in ipairs({"Left","Right"}) do
-            local real=c[side.." Leg"]; real.Massless=true
-            local fake=Instance.new("Part",c); fake.Name=side.." Leg"
-            fake.CanCollide=false; fake.Color=real.Color; fake.Size=Vector3.new(1,2,1)
-            fake.Locked=true; fake.Position=real.Position
-            local att=Instance.new("Attachment",fake)
-            att.Name=side.."FootAttachment"; att.Position=Vector3.new(0,-1,0)
-            local m=Instance.new("Motor6D",c.Torso); m.Name="Fake "..side.." Hip"
-            if side=="Left" then
-                m.C0=CFrame.new(-1,-1,0,0,0,-1,0,1,0,1,0,0)
-                m.C1=CFrame.new(-0.5,1,0,0,0,-1,0,1,0,1,0,0)
-            else
-                m.C0=CFrame.new(1,-1,0,0,0,1,0,1,0,-1,0,0)
-                m.C1=CFrame.new(0.5,1,0,0,0,1,0,1,0,-1,0,0)
-            end
-            m.Part0=c.Torso; m.Part1=fake
-        end
-    elseif hum.RigType==Enum.HumanoidRigType.R15 then
-        c["RightLowerLeg"].Transparency=1; c["LeftLowerLeg"].Transparency=1
-    end
-    notify("Fake Legs","Applied!",true)
-end)
 
 -- ============================================================
 -- ── MOSSING TAB ────────────────────────────────────────────
 -- ============================================================
 local headOn=false; local headSize=Vector3.new(1,1.5,1)
-local headTrans=0.5; local headPart; local headConn
+local headTrans=1; local headPart; local headConn
 
 local function rebuildHead()
     if headPart then headPart:Destroy(); headPart=nil end
@@ -947,23 +916,6 @@ mkToggle(tReacts, "Tackle React", "Fires react on tackle anim, reach auto-pauses
     notify("Tackle React", v and "ON" or "OFF", v)
 end)
 
-mkSection(tReacts, "Debug")
-mkButton(tReacts, "Scan Remotes", function()
-    local actions = workspace:FindFirstChild("FE") and workspace.FE:FindFirstChild("Actions")
-    if not actions then notify("Scan", "FE.Actions not found", false) return end
-    local names = {}
-    for _, v in pairs(actions:GetChildren()) do
-        if v:IsA("RemoteEvent") then
-            table.insert(names, v.Name)
-        end
-    end
-    -- print to console and notify chunks
-    print("=== ALL REMOTES ===")
-    for _, n in ipairs(names) do print(n) end
-    -- show first 5 in notification
-    notify("Remotes", table.concat(names, ", "), true)
-end)
-
 
 mkSection(tReacts, "Smart React")
 mkParagraph(tReacts,"❌ LEAVE OFF","Only fires when ball is coming directly at you. Too situational for general use — Touch React + Anim React already covers this better.")
@@ -1071,88 +1023,13 @@ mkToggle(tPerf, "FPS Boost", "Removes shadows, particles and heavy effects", fal
     notify("FPS Boost", state and "ON" or "OFF", state)
 end)
 
-local fpsConn
-mkToggle(tPerf, "FPS Counter", "Shows your current FPS", false, function(state)
-    if fpsConn then fpsConn:Disconnect(); fpsConn = nil end
-    if not state then notify("FPS", "Counter OFF", false) return end
-    local last = tick(); local frames = 0
-    fpsConn = RunService.RenderStepped:Connect(function()
-        frames = frames + 1
-        if tick() - last >= 1 then
-            notify("FPS", "FPS: "..frames, true)
-            frames = 0; last = tick()
-        end
-    end)
-end)
-
-
 
 -- ============================================================
 -- ── SETTINGS TAB ───────────────────────────────────────────
 -- ============================================================
 mkSection(tSettings, "About")
 mkParagraph(tSettings, "Wang Script", "Private | TPS Street Soccer\nBuilt for iPhone + Delta executor.\n\nDrag title bar to move UI.\n✕ to hide → tap ⚽ ball to reopen.")
-mkSection(tSettings, "Fast Flags")
-mkParagraph(tSettings, "Fast Flags", "Client-side engine tweaks — not bannable. Sets Roblox rendering flags for max FPS and minimum input latency. Apply once per session after loading.")
-mkButton(tSettings, "⚡ Apply Performance Flags", function()
-    -- Unlock FPS cap
-    pcall(function() setfpscap(10000) end)
-
-    -- Core fast flags via setrendererfidelity / global settings
-    local flags = {
-        -- FPS & rendering
-        FFlagDebugDisableTelemetryEphemeralCounter    = "True",
-        FFlagDebugDisableTelemetryEphemeralStat       = "True",
-        FFlagDebugDisableTelemetryEventIngest          = "True",
-        FFlagDebugDisableTelemetryPoint                = "True",
-        FFlagDebugDisableTelemetryV2Counter            = "True",
-        FFlagDebugDisableTelemetryV2Event              = "True",
-        FFlagDebugDisableTelemetryV2Stat               = "True",
-        DFFlagTextureQualityOverrideEnabled            = "True",
-        FIntTextureQualityOverride                     = "0",       -- lowest texture quality = more FPS
-        FIntRenderShadowIntensity                      = "0",       -- kills shadow rendering
-        FIntDebugForceMSAASamples                      = "0",       -- no anti-aliasing
-        DFIntMaxFrameBufferSize                        = "4",
-        FIntRenderShadowmapBias                        = "0",
-        FFlagDisablePostFx                             = "True",    -- no bloom/blur/DOF
-        FIntTerrainArraySliceSize                      = "4",
-        DFIntTaskSchedulerTargetFps                    = "9999",    -- scheduler target
-        FIntDebugTextureManagerSkipMips                = "8",       -- skip mip levels
-        DFFlagDebugRenderForceTechnologyVoxel          = "False",
-        FFlagEnableInGameMenuChromeABTest2             = "False",   -- disables heavy menu overhead
-        -- Input latency
-        FFlagUserInputServiceProcessMouseInputs        = "True",
-        DFIntConnectionMTUSize                         = "1500",    -- max MTU for lower packet overhead
-        DFIntMaxMissedWorldStepsRemembered             = "1",       -- reduces catchup lag spikes
-        DFIntMinimalNumberOfSendConnectionRetries      = "2",
-    }
-
-    local applied = 0
-    for flag, value in pairs(flags) do
-        local ok = pcall(function()
-            if syn and syn.set_fast_flag then
-                syn.set_fast_flag(flag, value)
-            elseif setfflag then
-                setfflag(flag, value)
-            end
-        end)
-        if ok then applied += 1 end
-    end
-
-    -- Lighting quality
-    pcall(function()
-        game:GetService("Lighting").GlobalShadows   = false
-        game:GetService("Lighting").FogEnd          = 100000
-        game:GetService("Lighting").Brightness      = 1
-    end)
-
-    notify("Fast Flags", "Applied " .. applied .. " flags ⚡", true)
-end)
-
-mkButton(tSettings, "🔓 Unlock FPS Only", function()
-    pcall(function() setfpscap(10000) end)
-    notify("FPS", "Uncapped ✅", true)
-end)
+mkSection(tSettings, "Window Size")
 mkSlider(tSettings, "Width", 260, 420, 340, 10, function(v)
     Win.Size = UDim2.new(0, v, 0, Win.AbsoluteSize.Y)
 end)
