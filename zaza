@@ -637,27 +637,9 @@ end
 
 mkSection(tReach,"Reach (FireTouchInterest)")
 mkToggle(tReach,"Enable Reach","Fires touch on ball when in range",false,function(v)
-    reachOn=v; updateReachGate(); rebuildReach(); notify("Reach",v and "ON" or "OFF",v)
+    reachOn=v; updateReachGate(); rebuildReach(); notify("Reach",v and "ON ✅" or "OFF ❌",v)
 end)
 mkSlider(tReach,"Reach Distance",1,8,1,0.1,function(v) reachDist=v; rebuildReach() end)
-
-mkSection(tReach,"Leg Size Reach")
-mkInput(tReach,"Leg Size R6","e.g. 3",function(v)
-    local n=tonumber(v); if not n then return end
-    local c=lplr.Character; if not c then return end
-    for _,nm in ipairs({"Right Leg","Left Leg"}) do
-        local p=c:FindFirstChild(nm); if p then p.Size=Vector3.new(n,2,n); p.CanCollide=false end
-    end
-    notify("R6 Legs","Size → "..v,true)
-end)
-mkInput(tReach,"Leg Size R15","e.g. 3",function(v)
-    local n=tonumber(v); if not n then return end
-    local c=lplr.Character; if not c then return end
-    for _,nm in ipairs({"RightLowerLeg","LeftLowerLeg"}) do
-        local p=c:FindFirstChild(nm); if p then p.Size=Vector3.new(n,2,n); p.CanCollide=false end
-    end
-    notify("R15 Legs","Size → "..v,true)
-end)
 
 
 -- ============================================================
