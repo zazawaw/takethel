@@ -1,35 +1,6 @@
 -- Wang Script | TPS Street Soccer | Private | Mobile/iPhone/Delta
 
 -- ============================================================
--- ANTI-CHEAT BYPASS
--- ============================================================
-for i, b in pairs(workspace.FE.Actions:GetChildren()) do
-    if b.Name == " " then b:Destroy() end
-end
-for i, b in pairs(game.Players.LocalPlayer.Character:GetChildren()) do
-    if b.Name == " " then b:Destroy() end
-end
-local _a = workspace.FE.Actions
-if _a:FindFirstChild("KeepYourHeadUp_") then
-    _a.KeepYourHeadUp_:Destroy()
-    local r = Instance.new("RemoteEvent")
-    r.Name = "KeepYourHeadUp_"
-    r.Parent = _a
-else
-    game.Players.LocalPlayer:Kick("Anti-Cheat Updated!")
-end
-local function _isWeird(name)
-    return string.match(name, "^[a-zA-Z]+%-%d+%a*%-%d+%a*$") ~= nil
-end
-local function _delWeird(parent)
-    for _, child in pairs(parent:GetChildren()) do
-        if child:IsA("RemoteEvent") and _isWeird(child.Name) then child:Destroy() end
-        _delWeird(child)
-    end
-end
-_delWeird(game)
-
--- ============================================================
 -- SERVICES
 -- ============================================================
 local Players          = game:GetService("Players")
@@ -667,7 +638,7 @@ end
 
 mkSection(tReach,"Reach (FireTouchInterest)")
 mkToggle(tReach,"Enable Reach","Fires touch on ball when in range",false,function(v)
-    reachOn=v; rebuildReach(); notify("Reach",v and "ON" or "OFF",v)
+    reachOn=v; updateReachGate(); rebuildReach(); notify("Reach",v and "ON" or "OFF",v)
 end)
 mkSlider(tReach,"Reach Distance",1,15,1,0.5,function(v) reachDist=v; rebuildReach() end)
 
@@ -741,8 +712,8 @@ local function rebuildHead()
         if TPS and headPart and headPart.Parent then
             if(headPart.Position-TPS.Position).Magnitude<(headSize.X/2+TPS.Size.X/2) then
                 local hum=c and c:FindFirstChildOfClass("Humanoid")
-                if hum then local limb=GetLimb(c,hum) or (c and c:FindFirstChild("Head"))
-                    if limb then firetouchinterest(limb,TPS,0); firetouchinterest(limb,TPS,1) end
+                if hum then
+                    doReact(c, hum, TPS)
                 end
             end
         end
@@ -750,7 +721,7 @@ local function rebuildHead()
 end
 
 mkSection(tMoss,"Head Reach (Mossing)")
-mkToggle(tMoss,"Enable Head Reach",nil,false,function(v) headOn=v; rebuildHead(); notify("Head Reach",v and "ON" or "OFF",v) end)
+mkToggle(tMoss,"Enable Head Reach",nil,false,function(v) headOn=v; updateReachGate(); rebuildHead(); notify("Head Reach",v and "ON" or "OFF",v) end)
 mkToggle(tMoss,"Appear Normal (invisible box)",nil,false,function(v)
     headTrans=v and 1 or 0.5; if headPart then headPart.Transparency=headTrans end
 end)
@@ -766,22 +737,32 @@ end
 -- ============================================================
 -- ── REACTS TAB ─────────────────────────────────────────────
 -- ============================================================
-local rcColConn; local rcFollower
 local rcAutoConn; local rcAutoOn=false; local rcAutoDist=4
+local rcAutoPrevDist = math.huge
 local rcTouchConn
 
--- Shared cooldown system — one cooldown across ALL react methods
--- so only ONE react fires per cooldown window, looking legit
-local RC_COOLDOWN = 0.35   -- seconds between reacts (adjustable)
-local rcLastFired  = 0
-local rcBusy       = false  -- prevents double-firing within same window
-local tackling     = false  -- blocks all other reacts during tackle animation
+-- ============================================================
+-- SHARED REACT CORE
+-- Humanised timing: each fire picks a random cooldown window
+-- between RC_MIN and RC_MAX so the interval is never the same.
+-- ============================================================
+-- Tuned for ~35ms ping — tighter window since server latency is low
+local RC_MIN      = 0.22
+local RC_MAX      = 0.38
+local rcLastFired = 0
+local rcBusy      = false
+local tackling    = false
+
+-- MASTER GATE: nothing fires unless at least one react is on
+local anyReachActive = false
 
 local function canFireReact()
     local now = tick()
+    if not anyReachActive then return false end
     if rcBusy then return false end
-    if tackling then return false end  -- block all reacts during tackle
-    if (now - rcLastFired) < RC_COOLDOWN then return false end
+    if tackling then return false end
+    if (now - rcLastFired) > 1.5 then rcBusy = false end  -- safety unstick
+    if (now - rcLastFired) < RC_MIN then return false end
     return true
 end
 
@@ -793,83 +774,65 @@ local function doReact(c, hum, TPS)
     rcLastFired = tick()
     firetouchinterest(limb, TPS, 0)
     firetouchinterest(limb, TPS, 1)
-    -- small random jitter so it never fires at exactly the same interval
-    task.delay(RC_COOLDOWN + math.random(0,8)*0.01, function()
-        rcBusy = false
-    end)
+    local nextWindow = RC_MIN + math.random() * (RC_MAX - RC_MIN)
+    task.delay(nextWindow, function() rcBusy = false end)
 end
 
--- ── Ball Collision ─────────────────────────────────────────
-mkSection(tReacts,"Ball Collision")
-mkToggle(tReacts,"Ball Collision","Synced invisible collider on ball",false,function(state)
-    if rcColConn then rcColConn:Disconnect(); rcColConn=nil end
-    if rcFollower then rcFollower:Destroy(); rcFollower=nil end
-    if not state then notify("Ball Collision","OFF",false) return end
-    local TPS=GetTPS(); if not TPS then notify("Reacts","Ball not found",false) return end
-    rcFollower=Instance.new("Part"); rcFollower.Shape=Enum.PartType.Ball
-    rcFollower.Anchored=true; rcFollower.CanCollide=true; rcFollower.Massless=true
-    rcFollower.Transparency=1; rcFollower.Parent=workspace
-    rcColConn=RunService.Heartbeat:Connect(function()
-        local t=GetTPS()
-        if t and rcFollower and rcFollower.Parent then
-            rcFollower.Size=t.Size*1.05; rcFollower.CFrame=t.CFrame
-        end
-    end)
-    notify("Ball Collision","ON",true)
-end)
-
--- ── Remove Ball Constraints ────────────────────────────────
-mkSection(tReacts,"Ball Delay")
-mkButton(tReacts,"Remove Ball Constraints",function()
-    local TPS=GetTPS(); if not TPS then notify("Reacts","Ball not found",false) return end
-    for _,v in pairs(TPS:GetChildren()) do
-        if v:IsA("Attachment") or v:IsA("BodyVelocity") or v:IsA("BodyForce") or v:IsA("BodyGyro") then
-            pcall(function() v:Destroy() end)
-        end
-    end
-    notify("Ball Delay","Constraints removed",true)
-end)
-
--- ── Touch React (fixed — cooldown, no spam) ───────────────
+-- ── Touch React ────────────────────────────────────────────
+-- Most legit react. Fires exactly when ball physically contacts
+-- your character. Looks identical to a normal player on server.
 mkSection(tReacts,"Touch React")
-mkParagraph(tReacts,"Touch React","Fires ONCE when ball touches your character. Cooldown prevents spam & lag. Best overall react for mobile.")
-mkToggle(tReacts,"Enable Touch React","Fires on physical ball contact",false,function(state)
+mkParagraph(tReacts,"✅ TURN THIS ON","Best react. Only fires on real ball contact — server sees it as a completely normal touch. Always have this on.")
+mkToggle(tReacts,"Enable Touch React","Fires on real ball contact",false,function(state)
     if rcTouchConn then rcTouchConn:Disconnect(); rcTouchConn=nil end
     if not state then notify("Touch React","OFF",false) return end
     local TPS=GetTPS(); if not TPS then notify("Reacts","Ball not found",false) return end
     rcTouchConn=TPS.Touched:Connect(function(hit)
         local c=lplr.Character; if not c then return end
-        -- must be our character part that got touched
         if not hit:IsDescendantOf(c) then return end
         local hum=c:FindFirstChildOfClass("Humanoid"); if not hum then return end
         local t=GetTPS(); if not t then return end
         local root=c:FindFirstChild("HumanoidRootPart"); if not root then return end
-        -- HARD distance check — ball must physically be close, not just a fake touch from far
-        local dist=(root.Position - t.Position).Magnitude
-        if dist > 6 then return end  -- cap slightly above reach dist so it always catches natural touches
+        if (root.Position - t.Position).Magnitude > 5.5 then return end
         doReact(c, hum, t)
     end)
-    notify("Touch React","ON",true)
+    notify("Touch React","ON ✅",true)
 end)
 
 -- ── Auto React ─────────────────────────────────────────────
+-- Entry-based: fires ONCE when ball crosses into your range,
+-- not every heartbeat frame. Far more natural than polling.
 mkSection(tReacts,"Auto React")
-mkToggle(tReacts,"Enable Auto React","Fires when ball is within distance",false,function(state)
-    rcAutoOn=state
+mkParagraph(tReacts,"✅ TURN THIS ON","Fires once the moment the ball enters your range — like your foot naturally meeting the ball. Keep distance 3–4.")
+mkToggle(tReacts,"Enable Auto React","Fires once on ball entry into range",false,function(state)
+    rcAutoOn=state; updateReachGate()
     if rcAutoConn then rcAutoConn:Disconnect(); rcAutoConn=nil end
+    rcAutoPrevDist = math.huge
     if not state then notify("Auto React","OFF",false) return end
     rcAutoConn=RunService.Heartbeat:Connect(function()
-        if not canFireReact() then return end
         local c=lplr.Character; local root=c and c:FindFirstChild("HumanoidRootPart")
         local hum=c and c:FindFirstChildOfClass("Humanoid")
         if not(c and root and hum) then return end
         local TPS=GetTPS(); if not TPS then return end
         local dist=(root.Position-TPS.Position).Magnitude
-        -- hard distance cap same as Touch React — won't fire from far away
-        if dist > rcAutoDist then return end
-        doReact(c,hum,TPS)
+        local wasOutside = rcAutoPrevDist > rcAutoDist
+        local nowInside  = dist <= rcAutoDist
+        rcAutoPrevDist = dist
+        if wasOutside and nowInside then
+            -- 35ms ping: 60–120ms delay still feels human but reacts quicker
+            local delay = 0.06 + math.random() * 0.06
+            task.delay(delay, function()
+                if not canFireReact() then return end
+                local c2=lplr.Character; local r2=c2 and c2:FindFirstChild("HumanoidRootPart")
+                local h2=c2 and c2:FindFirstChildOfClass("Humanoid")
+                if not(c2 and r2 and h2) then return end
+                local t2=GetTPS(); if not t2 then return end
+                if (r2.Position-t2.Position).Magnitude > rcAutoDist then return end
+                doReact(c2,h2,t2)
+            end)
+        end
     end)
-    notify("Auto React","ON",true)
+    notify("Auto React","ON ✅",true)
 end)
 
 -- ── Animation React ────────────────────────────────────────
@@ -892,34 +855,40 @@ local function hookAnimReact()
     local hum  = char:FindFirstChildOfClass("Humanoid"); if not hum then return end
     animReactConn = hum.AnimationPlayed:Connect(function(track)
         if not table.find(ANIM_NAMES, track.Name) then return end
-        if not canFireReact() then return end  -- respect shared cooldown
+        if not canFireReact() then return end
         local TPS  = GetTPS(); if not TPS then return end
         local root = char:FindFirstChild("HumanoidRootPart"); if not root then return end
-        -- hard distance check — must be physically close
         if (root.Position - TPS.Position).Magnitude > ANIM_DIST then return end
         local limb = GetLimb(char, hum); if not limb then return end
-        task.delay(0.06 + math.random(0,4)*0.01, function()
-            if tackling then return end  -- cancelled if tackle started
+        -- 35ms ping: tighter delay 60–120ms still looks human but lands faster
+        local delay = 0.06 + math.random() * 0.06
+        task.delay(delay, function()
+            if tackling then return end
             if not (limb.Parent and TPS.Parent) then return end
             local t2 = GetTPS(); if not t2 then return end
-            -- re-check after delay
             if (root.Position - t2.Position).Magnitude > ANIM_DIST then return end
+            if not canFireReact() then return end
             firetouchinterest(limb, t2, 0)
             firetouchinterest(limb, t2, 1)
+            rcBusy = true; rcLastFired = tick()
+            local nextWindow = RC_MIN + math.random() * (RC_MAX - RC_MIN)
+            task.delay(nextWindow, function() rcBusy = false end)
         end)
     end)
 end
 
-mkToggle(tReacts, "Animation React", "Fires react when kick/dribble anim plays near ball", false, function(v)
-    animReactOn = v
+mkParagraph(tReacts,"✅ TURN THIS ON","Reacts when you play a kick or dribble animation near the ball. Times the react to your actual foot movement — most natural-looking react in the script.")
+mkToggle(tReacts, "Animation React", "Fires on kick/dribble anim near ball", false, function(v)
+    animReactOn = v; updateReachGate()
     if v then hookAnimReact() else
         if animReactConn then animReactConn:Disconnect(); animReactConn=nil end
     end
-    notify("Anim React", v and "ON" or "OFF", v)
+    notify("Anim React", v and "ON ✅" or "OFF", v)
 end)
 
 -- ── Tackle React ───────────────────────────────────────────
 mkSection(tReacts, "Tackle React")
+mkParagraph(tReacts,"✅ TURN THIS ON IF YOU TACKLE","Fires react on tackle animations with a natural delay. Pauses reach so you don't double-fire.")
 
 local tackleReactOn   = false
 local tackleReactConn = nil
@@ -941,51 +910,75 @@ local function hookTackleReact()
         local limb = GetLimb(char, hum); if not limb then return end
         -- pause reach and block all other reacts during tackle
         local wasReachOn = reachOn
-        if wasReachOn then reachOn=false; rebuildReach() end
+        if wasReachOn then reachOn=false; updateReachGate(); rebuildReach() end
         tackling = true
-        -- wait 2 frames so reach loop fully stops before firing
-        task.delay(0.18 + math.random(0,5)*0.01, function()
+        -- 35ms ping: 110–180ms, tight but still within natural tackle contact window
+        task.delay(0.11 + math.random() * 0.07, function()
             if not (limb.Parent and TPS.Parent) then
-                if wasReachOn then reachOn=true; rebuildReach() end
+                if wasReachOn then reachOn=true; updateReachGate(); rebuildReach() end
                 tackling = false; return
             end
             local t2 = GetTPS(); if not t2 then
-                if wasReachOn then reachOn=true; rebuildReach() end
+                if wasReachOn then reachOn=true; updateReachGate(); rebuildReach() end
                 tackling = false; return
             end
             if (root.Position - t2.Position).Magnitude > TACKLE_DIST then
-                if wasReachOn then reachOn=true; rebuildReach() end
+                if wasReachOn then reachOn=true; updateReachGate(); rebuildReach() end
                 tackling = false; return
             end
             firetouchinterest(limb, t2, 0); firetouchinterest(limb, t2, 1)
         end)
         task.delay(0.65, function()
-            if wasReachOn then reachOn=true; rebuildReach() end
+            if wasReachOn then reachOn=true; updateReachGate(); rebuildReach() end
             tackling = false
         end)
         track.Stopped:Connect(function()
-            if wasReachOn and not reachOn then reachOn=true; rebuildReach() end
+            if wasReachOn and not reachOn then reachOn=true; updateReachGate(); rebuildReach() end
             tackling = false
         end)
     end)
 end
 
 mkToggle(tReacts, "Tackle React", "Fires react on tackle anim, reach auto-pauses", false, function(v)
-    tackleReactOn = v
+    tackleReactOn = v; updateReachGate()
     if v then hookTackleReact() else
         if tackleReactConn then tackleReactConn:Disconnect(); tackleReactConn=nil end
     end
     notify("Tackle React", v and "ON" or "OFF", v)
 end)
 
--- ── Smart React ────────────────────────────────────────────
+mkSection(tReacts, "Debug")
+mkButton(tReacts, "Scan Remotes", function()
+    local actions = workspace:FindFirstChild("FE") and workspace.FE:FindFirstChild("Actions")
+    if not actions then notify("Scan", "FE.Actions not found", false) return end
+    local names = {}
+    for _, v in pairs(actions:GetChildren()) do
+        if v:IsA("RemoteEvent") then
+            table.insert(names, v.Name)
+        end
+    end
+    -- print to console and notify chunks
+    print("=== ALL REMOTES ===")
+    for _, n in ipairs(names) do print(n) end
+    -- show first 5 in notification
+    notify("Remotes", table.concat(names, ", "), true)
+end)
+
+
 mkSection(tReacts, "Smart React")
+mkParagraph(tReacts,"❌ LEAVE OFF","Only fires when ball is coming directly at you. Too situational for general use — Touch React + Anim React already covers this better.")
 
 local smartOn   = false
 local smartConn = nil
 local smartDist = 5
+
+-- Updates master gate — call whenever any reach/react toggle changes
+local function updateReachGate()
+    anyReachActive = reachOn or headOn or rcAutoOn or smartOn
+        or animReactOn or tackleReactOn
+end
 mkToggle(tReacts, "Smart React", "Only reacts when ball is heading toward you", false, function(state)
-    smartOn = state
+    smartOn = state; updateReachGate()
     if smartConn then smartConn:Disconnect(); smartConn=nil end
     if not state then notify("Smart React","OFF",false) return end
     smartConn = RunService.Heartbeat:Connect(function()
@@ -1000,7 +993,7 @@ mkToggle(tReacts, "Smart React", "Only reacts when ball is heading toward you", 
         local toPlayer = (root.Position - TPS.Position).Unit
         local ballVel  = TPS.AssemblyLinearVelocity
         if ballVel.Magnitude < 0.5 then return end
-        if toPlayer:Dot(ballVel.Unit) > 0.3 then
+        if toPlayer:Dot(ballVel.Unit) > 0.55 then
             doReact(c, hum, TPS)
         end
     end)
@@ -1092,19 +1085,74 @@ mkToggle(tPerf, "FPS Counter", "Shows your current FPS", false, function(state)
     end)
 end)
 
-mkToggle(tPerf, "Fake Ping", "Shows 0ms ping in scoreboard", false, function(state)
-    if state then
-        game:GetService("Stats").Network.ServerStatsItem["Data Ping"]:SetValue(0)
-    end
-    notify("Ping", state and "Faked to 0ms" or "OFF", state)
-end)
+
 
 -- ============================================================
 -- ── SETTINGS TAB ───────────────────────────────────────────
 -- ============================================================
 mkSection(tSettings, "About")
 mkParagraph(tSettings, "Wang Script", "Private | TPS Street Soccer\nBuilt for iPhone + Delta executor.\n\nDrag title bar to move UI.\n✕ to hide → tap ⚽ ball to reopen.")
-mkSection(tSettings, "Window Size")
+mkSection(tSettings, "Fast Flags")
+mkParagraph(tSettings, "Fast Flags", "Client-side engine tweaks — not bannable. Sets Roblox rendering flags for max FPS and minimum input latency. Apply once per session after loading.")
+mkButton(tSettings, "⚡ Apply Performance Flags", function()
+    -- Unlock FPS cap
+    pcall(function() setfpscap(10000) end)
+
+    -- Core fast flags via setrendererfidelity / global settings
+    local flags = {
+        -- FPS & rendering
+        FFlagDebugDisableTelemetryEphemeralCounter    = "True",
+        FFlagDebugDisableTelemetryEphemeralStat       = "True",
+        FFlagDebugDisableTelemetryEventIngest          = "True",
+        FFlagDebugDisableTelemetryPoint                = "True",
+        FFlagDebugDisableTelemetryV2Counter            = "True",
+        FFlagDebugDisableTelemetryV2Event              = "True",
+        FFlagDebugDisableTelemetryV2Stat               = "True",
+        DFFlagTextureQualityOverrideEnabled            = "True",
+        FIntTextureQualityOverride                     = "0",       -- lowest texture quality = more FPS
+        FIntRenderShadowIntensity                      = "0",       -- kills shadow rendering
+        FIntDebugForceMSAASamples                      = "0",       -- no anti-aliasing
+        DFIntMaxFrameBufferSize                        = "4",
+        FIntRenderShadowmapBias                        = "0",
+        FFlagDisablePostFx                             = "True",    -- no bloom/blur/DOF
+        FIntTerrainArraySliceSize                      = "4",
+        DFIntTaskSchedulerTargetFps                    = "9999",    -- scheduler target
+        FIntDebugTextureManagerSkipMips                = "8",       -- skip mip levels
+        DFFlagDebugRenderForceTechnologyVoxel          = "False",
+        FFlagEnableInGameMenuChromeABTest2             = "False",   -- disables heavy menu overhead
+        -- Input latency
+        FFlagUserInputServiceProcessMouseInputs        = "True",
+        DFIntConnectionMTUSize                         = "1500",    -- max MTU for lower packet overhead
+        DFIntMaxMissedWorldStepsRemembered             = "1",       -- reduces catchup lag spikes
+        DFIntMinimalNumberOfSendConnectionRetries      = "2",
+    }
+
+    local applied = 0
+    for flag, value in pairs(flags) do
+        local ok = pcall(function()
+            if syn and syn.set_fast_flag then
+                syn.set_fast_flag(flag, value)
+            elseif setfflag then
+                setfflag(flag, value)
+            end
+        end)
+        if ok then applied += 1 end
+    end
+
+    -- Lighting quality
+    pcall(function()
+        game:GetService("Lighting").GlobalShadows   = false
+        game:GetService("Lighting").FogEnd          = 100000
+        game:GetService("Lighting").Brightness      = 1
+    end)
+
+    notify("Fast Flags", "Applied " .. applied .. " flags ⚡", true)
+end)
+
+mkButton(tSettings, "🔓 Unlock FPS Only", function()
+    pcall(function() setfpscap(10000) end)
+    notify("FPS", "Uncapped ✅", true)
+end)
 mkSlider(tSettings, "Width", 260, 420, 340, 10, function(v)
     Win.Size = UDim2.new(0, v, 0, Win.AbsoluteSize.Y)
 end)
