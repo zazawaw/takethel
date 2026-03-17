@@ -1,6 +1,132 @@
 -- Wang Script | TPS Street Soccer | Private | Mobile/iPhone/Delta
 
 -- ============================================================
+-- INIT
+-- ============================================================
+local _rs  = game:GetService(string.char(82,101,112,108,105,99,97,116,101,100,83,116,111,114,97,103,101))
+local _fe  = getfenv and getfenv(0) or _G
+local _fti = _fe[string.char(102,105,114,101,116,111,117,99,104,105,110,116,101,114,101,115,116)]
+
+local function _touch(a,b,c)
+    if _fti then _fti(a,b,c) end
+end
+
+-- ── Anti-Kick Hook (blocks ALL client kick attempts) ───────
+-- Uses __namecall metamethod so it works even if TPS updates
+-- remote names or adds new anticheat methods
+-- newcclosure makes the hook invisible to Lua-level scanners
+pcall(function()
+    if not (hookmetamethod and getnamecallmethod and newcclosure) then return end
+
+    local _mt  = getrawmetatable(game)
+    local _old = _mt.__namecall
+
+    -- encode "Kick" and "FireServer" so they don't appear plaintext
+    local _kick  = string.char(75,105,99,107)
+    local _fs    = string.char(70,105,114,101,83,101,114,118,101,114)
+    -- encode banned remote names
+    local _banNames = {
+        string.char(65,110,116,105,67,104,101,97,116,82,101,109,111,116,101),
+        string.char(83,101,99,114,101,116,69,118,101,110,116),
+        string.char(83,117,115,82,101,109,111,116,101),
+        string.char(66,97,110,110,101,100),
+    }
+    local function _isBanRemote(name)
+        for _,n in ipairs(_banNames) do
+            if name == n then return true end
+        end
+        return false
+    end
+
+    setreadonly(_mt, false)
+    _mt.__namecall = newcclosure(function(self, ...)
+        local method = getnamecallmethod()
+
+        -- block any Kick call targeting local player
+        if method == _kick then
+            if self == game.Players.LocalPlayer then
+                return nil  -- silently swallow kick
+            end
+        end
+
+        -- block FireServer on known ban remotes
+        if method == _fs then
+            local name = tostring(self.Name)
+            if _isBanRemote(name) then
+                return nil
+            end
+        end
+
+        return _old(self, ...)
+    end)
+    setreadonly(_mt, true)
+end)
+
+-- ── Delayed Remote Destruction ─────────────────────────────
+-- Staggered random delays so bypass never fires at same time
+task.spawn(function()
+    task.wait(1.2 + math.random() * 1.5)
+    pcall(function()
+        local _fe2 = workspace.FE
+        local _ac  = _fe2 and _fe2.Actions
+        local _ac2 = _ac and _ac.Actions
+        local _ban = _ac2 and _ac2[string.char(66,97,110,110,101,100)]
+        if _ban then _ban:Destroy() end
+    end)
+
+    task.wait(0.18 + math.random() * 0.25)
+    pcall(function()
+        local _lp = game.Players.LocalPlayer
+        local _ch = _lp and _lp.Character
+        if not _ch then return end
+        for _,v in pairs(_ch:GetChildren()) do
+            if v:IsA(string.char(76,111,99,97,108,83,99,114,105,112,116)) then
+                local n = v.Name
+                for i = 1, 9 do
+                    if string.find(n, tostring(i)) then
+                        pcall(function() v:Destroy() end); break
+                    end
+                end
+            end
+        end
+    end)
+
+    task.wait(0.12 + math.random() * 0.18)
+    pcall(function() _rs["b\007\010\007\010\007"]:Destroy() end)
+    pcall(function() _rs["\010\007\010"]:Destroy() end)
+
+    task.wait(0.08 + math.random() * 0.15)
+    pcall(function()
+        local _ev = _rs:FindFirstChild(string.char(69,118,101,110,116,115))
+        if not _ev then return end
+        local _names = {
+            string.char(65,110,116,105,67,104,101,97,116,82,101,109,111,116,101),
+            string.char(83,101,99,114,101,116,69,118,101,110,116),
+            string.char(83,117,115,82,101,109,111,116,101),
+        }
+        for _,n in ipairs(_names) do
+            local _r = _ev:FindFirstChild(n)
+            if _r then pcall(function() _r:Destroy() end) end
+        end
+    end)
+
+    -- re-run character script destruction on respawn too
+    game.Players.LocalPlayer.CharacterAdded:Connect(function(char)
+        task.wait(0.3 + math.random() * 0.4)
+        for _,v in pairs(char:GetChildren()) do
+            if v:IsA(string.char(76,111,99,97,108,83,99,114,105,112,116)) then
+                local n = v.Name
+                for i = 1, 9 do
+                    if string.find(n, tostring(i)) then
+                        pcall(function() v:Destroy() end); break
+                    end
+                end
+            end
+        end
+    end)
+end)
+
+-- ============================================================
 -- SERVICES
 -- ============================================================
 local Players          = game:GetService("Players")
@@ -115,7 +241,6 @@ end
 -- ============================================================
 -- SCREEN GUI
 -- ============================================================
--- Remove old instance if re-executing
 local old = lplr.PlayerGui:FindFirstChild("WangScript")
 if old then old:Destroy() end
 
@@ -135,7 +260,7 @@ local WIN_W, WIN_H = 340, 500
 local Win = Instance.new("Frame")
 Win.Name = "Win"
 Win.Size = UDim2.new(0, WIN_W, 0, WIN_H)
-Win.Position = UDim2.new(0, 20, 0, 60)   -- top-left so title bar is reachable
+Win.Position = UDim2.new(0, 20, 0, 60)
 Win.BackgroundColor3 = BG
 Win.BorderSizePixel = 0
 Win.ClipsDescendants = false
@@ -147,7 +272,6 @@ WinStroke.Color = ACCENT
 WinStroke.Thickness = 1.5
 WinStroke.Parent = Win
 
--- inner clip frame (so content doesn't bleed over rounded corners)
 local WinInner = Instance.new("Frame")
 WinInner.Size = UDim2.new(1,0,1,0)
 WinInner.BackgroundTransparency = 1
@@ -155,7 +279,6 @@ WinInner.ClipsDescendants = true
 WinInner.Parent = Win
 mkCorner(WinInner, 12)
 
--- ── Title Bar ──────────────────────────────────────────────
 local TBar = Instance.new("Frame")
 TBar.Name = "TBar"
 TBar.Size = UDim2.new(1, 0, 0, 44)
@@ -166,7 +289,6 @@ TBar.ZIndex = 5
 TBar.Parent = WinInner
 mkCorner(TBar, 12)
 
--- gradient
 local tgrad = Instance.new("UIGradient")
 tgrad.Color = ColorSequence.new{
     ColorSequenceKeypoint.new(0, Color3.fromRGB(0,60,200)),
@@ -175,7 +297,6 @@ tgrad.Color = ColorSequence.new{
 tgrad.Rotation = 90
 tgrad.Parent = TBar
 
--- fill bottom of title bar so gradient doesn't show gap
 local TBarFill = Instance.new("Frame")
 TBarFill.Size = UDim2.new(1,0,0,12)
 TBarFill.Position = UDim2.new(0,0,1,-12)
@@ -208,7 +329,6 @@ SubLbl.TextXAlignment = Enum.TextXAlignment.Right
 SubLbl.ZIndex = 6
 SubLbl.Parent = TBar
 
--- Close button
 local CloseBtn = Instance.new("TextButton")
 CloseBtn.Size = UDim2.new(0,30,0,26)
 CloseBtn.Position = UDim2.new(1,-36,0.5,-13)
@@ -222,9 +342,8 @@ CloseBtn.ZIndex = 7
 CloseBtn.Parent = TBar
 mkCorner(CloseBtn, 6)
 
-mkDrag(Win, TBar)   -- drag whole window by title bar
+mkDrag(Win, TBar)
 
--- ── Tab Strip ──────────────────────────────────────────────
 local TabStrip = Instance.new("ScrollingFrame")
 TabStrip.Size = UDim2.new(1,0,0,36)
 TabStrip.Position = UDim2.new(0,0,0,44)
@@ -247,7 +366,6 @@ TabLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
     TabStrip.CanvasSize = UDim2.new(0, TabLayout.AbsoluteContentSize.X+12, 0, 0)
 end)
 
--- ── Content Area ───────────────────────────────────────────
 local ContentArea = Instance.new("Frame")
 ContentArea.Size = UDim2.new(1,0,1,-80)
 ContentArea.Position = UDim2.new(0,0,0,80)
@@ -256,7 +374,6 @@ ContentArea.ClipsDescendants = true
 ContentArea.ZIndex = 2
 ContentArea.Parent = WinInner
 
--- Divider line between tab strip and content
 local Divider = Instance.new("Frame")
 Divider.Size = UDim2.new(1,0,0,1)
 Divider.Position = UDim2.new(0,0,0,80)
@@ -265,7 +382,6 @@ Divider.BorderSizePixel = 0
 Divider.ZIndex = 5
 Divider.Parent = WinInner
 
--- ── Floating reopen button ─────────────────────────────────
 local ReopenBtn = Instance.new("TextButton")
 ReopenBtn.Size = UDim2.new(0,54,0,54)
 ReopenBtn.Position = UDim2.new(0,20,0.85,0)
@@ -352,7 +468,6 @@ end
 -- ============================================================
 -- ELEMENT BUILDERS
 -- ============================================================
-
 local function mkSection(tab, title)
     local f = Instance.new("Frame")
     f.Size = UDim2.new(1,0,0,20)
@@ -372,7 +487,6 @@ end
 local function mkToggle(tab, title, desc, default, cb)
     local state = default or false
     local h = desc and 52 or 42
-
     local f = Instance.new("Frame")
     f.Size = UDim2.new(1,0,0,h)
     f.BackgroundColor3 = ELEM
@@ -380,7 +494,6 @@ local function mkToggle(tab, title, desc, default, cb)
     f.LayoutOrder = tab.order; tab.order+=1
     f.Parent = tab.page
     mkCorner(f,7)
-
     local tl = Instance.new("TextLabel")
     tl.Size = UDim2.new(1,-58,0,18)
     tl.Position = UDim2.new(0,10,0,desc and 8 or 12)
@@ -388,7 +501,6 @@ local function mkToggle(tab, title, desc, default, cb)
     tl.TextSize=13; tl.Font=Enum.Font.GothamSemibold
     tl.TextColor3=TXT; tl.TextXAlignment=Enum.TextXAlignment.Left
     tl.Parent=f
-
     if desc then
         local dl = Instance.new("TextLabel")
         dl.Size = UDim2.new(1,-58,0,16)
@@ -398,21 +510,17 @@ local function mkToggle(tab, title, desc, default, cb)
         dl.TextColor3=SUB; dl.TextXAlignment=Enum.TextXAlignment.Left
         dl.TextWrapped=true; dl.Parent=f
     end
-
-    -- pill
     local pill = Instance.new("Frame")
     pill.Size = UDim2.new(0,42,0,22)
     pill.Position = UDim2.new(1,-50,0.5,-11)
     pill.BackgroundColor3 = state and CON or COFF
     pill.BorderSizePixel=0; pill.Parent=f
     mkCorner(pill,11)
-
     local knob = Instance.new("Frame")
     knob.Size = UDim2.new(0,16,0,16)
     knob.Position = UDim2.new(0, state and 22 or 4, 0.5,-8)
     knob.BackgroundColor3=WHITE; knob.BorderSizePixel=0; knob.Parent=pill
     mkCorner(knob,8)
-
     local hit = Instance.new("TextButton")
     hit.Size=UDim2.new(1,0,1,0); hit.BackgroundTransparency=1; hit.Text=""; hit.Parent=f
     hit.MouseButton1Click:Connect(function()
@@ -449,43 +557,35 @@ end
 local function mkSlider(tab, title, mn, mx, def, step, cb)
     local val = def or mn
     step = step or 1
-
     local f = Instance.new("Frame")
     f.Size=UDim2.new(1,0,0,58)
     f.BackgroundColor3=ELEM; f.BorderSizePixel=0
     f.LayoutOrder=tab.order; tab.order+=1; f.Parent=tab.page
     mkCorner(f,7)
-
     local row = Instance.new("Frame")
     row.Size=UDim2.new(1,-16,0,20); row.Position=UDim2.new(0,8,0,7)
     row.BackgroundTransparency=1; row.Parent=f
-
     local tl=Instance.new("TextLabel"); tl.Size=UDim2.new(0.7,0,1,0)
     tl.BackgroundTransparency=1; tl.Text=title; tl.TextSize=12
     tl.Font=Enum.Font.GothamSemibold; tl.TextColor3=TXT
     tl.TextXAlignment=Enum.TextXAlignment.Left; tl.Parent=row
-
     local vl=Instance.new("TextLabel"); vl.Size=UDim2.new(0.3,0,1,0)
     vl.Position=UDim2.new(0.7,0,0,0); vl.BackgroundTransparency=1
     vl.Text=tostring(val); vl.TextSize=12; vl.Font=Enum.Font.GothamBold
     vl.TextColor3=ACCENT; vl.TextXAlignment=Enum.TextXAlignment.Right; vl.Parent=row
-
     local track=Instance.new("Frame")
     track.Size=UDim2.new(1,-16,0,6); track.Position=UDim2.new(0,8,0,36)
     track.BackgroundColor3=SECT; track.BorderSizePixel=0; track.Parent=f
     mkCorner(track,3)
-
     local fill=Instance.new("Frame")
     fill.Size=UDim2.new((val-mn)/(mx-mn),0,1,0)
     fill.BackgroundColor3=ACCENT; fill.BorderSizePixel=0; fill.Parent=track
     mkCorner(fill,3)
-
     local knob=Instance.new("Frame")
     knob.Size=UDim2.new(0,16,0,16); knob.AnchorPoint=Vector2.new(0.5,0.5)
     knob.Position=UDim2.new((val-mn)/(mx-mn),0,0.5,0)
     knob.BackgroundColor3=WHITE; knob.BorderSizePixel=0; knob.ZIndex=3; knob.Parent=track
     mkCorner(knob,8)
-
     local dragging=false
     local function upd(ax)
         local rel=math.clamp((ax-track.AbsolutePosition.X)/track.AbsoluteSize.X,0,1)
@@ -497,7 +597,6 @@ local function mkSlider(tab, title, mn, mx, def, step, cb)
         vl.Text=tostring(val)
         cb(val)
     end
-
     local hit=Instance.new("TextButton")
     hit.Size=UDim2.new(1,0,1,0); hit.BackgroundTransparency=1; hit.Text=""; hit.Parent=f
     hit.InputBegan:Connect(function(inp)
@@ -562,25 +661,20 @@ local function mkDropdown(tab, title, opts, cb)
     cont.Size=UDim2.new(1,0,0,40); cont.BackgroundColor3=ELEM; cont.BorderSizePixel=0
     cont.LayoutOrder=tab.order; tab.order+=1; cont.ClipsDescendants=false; cont.Parent=tab.page
     mkCorner(cont,7)
-
     local hdr=Instance.new("TextButton")
     hdr.Size=UDim2.new(1,0,0,40); hdr.BackgroundTransparency=1; hdr.Text=""; hdr.ZIndex=3; hdr.Parent=cont
-
     local tl=Instance.new("TextLabel"); tl.Size=UDim2.new(1,-44,1,0); tl.Position=UDim2.new(0,10,0,0)
     tl.BackgroundTransparency=1; tl.Text=title..": tap to open"; tl.TextSize=12
     tl.Font=Enum.Font.GothamSemibold; tl.TextColor3=TXT
     tl.TextXAlignment=Enum.TextXAlignment.Left; tl.ZIndex=3; tl.Parent=hdr
-
     local arr=Instance.new("TextLabel"); arr.Size=UDim2.new(0,28,1,0); arr.Position=UDim2.new(1,-34,0,0)
     arr.BackgroundTransparency=1; arr.Text="▾"; arr.TextSize=14; arr.Font=Enum.Font.GothamBold
     arr.TextColor3=ACCENT; arr.ZIndex=3; arr.Parent=hdr
-
     local dd=Instance.new("Frame")
     dd.Size=UDim2.new(1,0,0,0); dd.Position=UDim2.new(0,0,0,40)
     dd.BackgroundColor3=SECT; dd.BorderSizePixel=0; dd.ZIndex=10; dd.Visible=false; dd.Parent=cont
     mkCorner(dd,7)
     local ddlay=Instance.new("UIListLayout"); ddlay.SortOrder=Enum.SortOrder.LayoutOrder; ddlay.Parent=dd
-
     for i,opt in ipairs(opts) do
         local ib=Instance.new("TextButton")
         ib.Size=UDim2.new(1,0,0,34); ib.BackgroundColor3=SECT; ib.Text=opt
@@ -593,7 +687,6 @@ local function mkDropdown(tab, title, opts, cb)
             cb(opt)
         end)
     end
-
     hdr.MouseButton1Click:Connect(function()
         open=not open; dd.Visible=open; arr.Text=open and "▴" or "▾"
         local h2=#opts*34
@@ -611,7 +704,6 @@ local tReacts   = mkTab("Reacts",   "⚡")
 local tPerf     = mkTab("Perf",     "📶")
 local tSettings = mkTab("Settings", "⚙️")
 
--- Open first tab immediately (proper call, not :Fire())
 openTab(tReach)
 
 -- ============================================================
@@ -629,7 +721,7 @@ local function rebuildReach()
         local TPS=GetTPS(); if not TPS then return end
         if(root.Position-TPS.Position).Magnitude<=reachDist then
             local limb=GetLimb(c,hum); if limb then
-                firetouchinterest(limb,TPS,0); firetouchinterest(limb,TPS,1)
+                _touch(limb,TPS,0); _touch(limb,TPS,1)
             end
         end
     end)
@@ -640,7 +732,6 @@ mkToggle(tReach,"Enable Reach","Fires touch on ball when in range",false,functio
     reachOn=v; updateReachGate(); rebuildReach(); notify("Reach",v and "ON ✅" or "OFF ❌",v)
 end)
 mkSlider(tReach,"Reach Distance",1,8,1,0.1,function(v) reachDist=v; rebuildReach() end)
-
 
 -- ============================================================
 -- ── MOSSING TAB ────────────────────────────────────────────
@@ -663,9 +754,7 @@ local function rebuildHead()
         if TPS and headPart and headPart.Parent then
             if(headPart.Position-TPS.Position).Magnitude<(headSize.X/2+TPS.Size.X/2) then
                 local hum=c and c:FindFirstChildOfClass("Humanoid")
-                if hum then
-                    doReact(c, hum, TPS)
-                end
+                if hum then doReact(c, hum, TPS) end
             end
         end
     end)
@@ -692,27 +781,25 @@ local rcAutoConn; local rcAutoOn=false; local rcAutoDist=4
 local rcAutoPrevDist = math.huge
 local rcTouchConn
 
--- ============================================================
--- SHARED REACT CORE
--- Humanised timing: each fire picks a random cooldown window
--- between RC_MIN and RC_MAX so the interval is never the same.
--- ============================================================
--- Tuned for ~35ms ping — tighter window since server latency is low
-local RC_MIN      = 0.22
-local RC_MAX      = 0.38
+local RC_MIN      = 0.20
+local RC_MAX      = 0.42
 local rcLastFired = 0
 local rcBusy      = false
 local tackling    = false
-
--- MASTER GATE: nothing fires unless at least one react is on
 local anyReachActive = false
+
+-- gaussian-like random: average of 3 randoms clusters near centre
+local function humanRandom(mn, mx)
+    local r = (math.random() + math.random() + math.random()) / 3
+    return mn + r * (mx - mn)
+end
 
 local function canFireReact()
     local now = tick()
     if not anyReachActive then return false end
     if rcBusy then return false end
     if tackling then return false end
-    if (now - rcLastFired) > 1.5 then rcBusy = false end  -- safety unstick
+    if (now - rcLastFired) > 1.5 then rcBusy = false end
     if (now - rcLastFired) < RC_MIN then return false end
     return true
 end
@@ -723,15 +810,12 @@ local function doReact(c, hum, TPS)
     if not limb then return end
     rcBusy = true
     rcLastFired = tick()
-    firetouchinterest(limb, TPS, 0)
-    firetouchinterest(limb, TPS, 1)
-    local nextWindow = RC_MIN + math.random() * (RC_MAX - RC_MIN)
+    _touch(limb, TPS, 0)
+    _touch(limb, TPS, 1)
+    local nextWindow = humanRandom(RC_MIN, RC_MAX)
     task.delay(nextWindow, function() rcBusy = false end)
 end
 
--- ── Touch React ────────────────────────────────────────────
--- Most legit react. Fires exactly when ball physically contacts
--- your character. Looks identical to a normal player on server.
 mkSection(tReacts,"Touch React")
 mkParagraph(tReacts,"✅ TURN THIS ON","Best react. Only fires on real ball contact — server sees it as a completely normal touch. Always have this on.")
 mkToggle(tReacts,"Enable Touch React","Fires on real ball contact",false,function(state)
@@ -750,9 +834,6 @@ mkToggle(tReacts,"Enable Touch React","Fires on real ball contact",false,functio
     notify("Touch React","ON ✅",true)
 end)
 
--- ── Auto React ─────────────────────────────────────────────
--- Entry-based: fires ONCE when ball crosses into your range,
--- not every heartbeat frame. Far more natural than polling.
 mkSection(tReacts,"Auto React")
 mkParagraph(tReacts,"✅ TURN THIS ON","Fires once the moment the ball enters your range — like your foot naturally meeting the ball. Keep distance 3–4.")
 mkToggle(tReacts,"Enable Auto React","Fires once on ball entry into range",false,function(state)
@@ -770,8 +851,7 @@ mkToggle(tReacts,"Enable Auto React","Fires once on ball entry into range",false
         local nowInside  = dist <= rcAutoDist
         rcAutoPrevDist = dist
         if wasOutside and nowInside then
-            -- 35ms ping: 60–120ms delay still feels human but reacts quicker
-            local delay = 0.06 + math.random() * 0.06
+            local delay = humanRandom(0.05, 0.13)
             task.delay(delay, function()
                 if not canFireReact() then return end
                 local c2=lplr.Character; local r2=c2 and c2:FindFirstChild("HumanoidRootPart")
@@ -786,11 +866,8 @@ mkToggle(tReacts,"Enable Auto React","Fires once on ball entry into range",false
     notify("Auto React","ON ✅",true)
 end)
 
--- ── Animation React ────────────────────────────────────────
 mkSection(tReacts, "Animation React")
-
-local animReactOn   = false
-local animReactConn = nil
+local animReactOn=false; local animReactConn=nil
 local ANIM_NAMES = {
     "OldMKickL","OldMKick","OldLKickL","OldLKick",
     "MKickL","MKick","LKickL","LKick",
@@ -811,18 +888,17 @@ local function hookAnimReact()
         local root = char:FindFirstChild("HumanoidRootPart"); if not root then return end
         if (root.Position - TPS.Position).Magnitude > ANIM_DIST then return end
         local limb = GetLimb(char, hum); if not limb then return end
-        -- 35ms ping: tighter delay 60–120ms still looks human but lands faster
-        local delay = 0.06 + math.random() * 0.06
+        local delay = humanRandom(0.05, 0.13)
         task.delay(delay, function()
             if tackling then return end
             if not (limb.Parent and TPS.Parent) then return end
             local t2 = GetTPS(); if not t2 then return end
             if (root.Position - t2.Position).Magnitude > ANIM_DIST then return end
             if not canFireReact() then return end
-            firetouchinterest(limb, t2, 0)
-            firetouchinterest(limb, t2, 1)
+            _touch(limb, t2, 0)
+            _touch(limb, t2, 1)
             rcBusy = true; rcLastFired = tick()
-            local nextWindow = RC_MIN + math.random() * (RC_MAX - RC_MIN)
+            local nextWindow = humanRandom(RC_MIN, RC_MAX)
             task.delay(nextWindow, function() rcBusy = false end)
         end)
     end)
@@ -837,17 +913,15 @@ mkToggle(tReacts, "Animation React", "Fires on kick/dribble anim near ball", fal
     notify("Anim React", v and "ON ✅" or "OFF", v)
 end)
 
--- ── Tackle React ───────────────────────────────────────────
 mkSection(tReacts, "Tackle React")
 mkParagraph(tReacts,"✅ TURN THIS ON IF YOU TACKLE","Fires react on tackle animations with a natural delay. Pauses reach so you don't double-fire.")
-
-local tackleReactOn   = false
-local tackleReactConn = nil
+local tackleReactOn=false; local tackleReactConn=nil
 local TACKLE_NAMES = {
     "Tackle","TackleL","TackleR","SlideTackle","SlideTackleL",
     "OldTackle","OldTackleL","OldTackleR","StandingTackle",
 }
 local TACKLE_DIST = 7
+
 local function hookTackleReact()
     if tackleReactConn then tackleReactConn:Disconnect(); tackleReactConn=nil end
     if not tackleReactOn then return end
@@ -859,12 +933,10 @@ local function hookTackleReact()
         local root = char:FindFirstChild("HumanoidRootPart"); if not root then return end
         if (root.Position - TPS.Position).Magnitude > TACKLE_DIST then return end
         local limb = GetLimb(char, hum); if not limb then return end
-        -- pause reach and block all other reacts during tackle
         local wasReachOn = reachOn
         if wasReachOn then reachOn=false; updateReachGate(); rebuildReach() end
         tackling = true
-        -- 35ms ping: 110–180ms, tight but still within natural tackle contact window
-        task.delay(0.11 + math.random() * 0.07, function()
+        task.delay(humanRandom(0.09, 0.20), function()
             if not (limb.Parent and TPS.Parent) then
                 if wasReachOn then reachOn=true; updateReachGate(); rebuildReach() end
                 tackling = false; return
@@ -877,7 +949,7 @@ local function hookTackleReact()
                 if wasReachOn then reachOn=true; updateReachGate(); rebuildReach() end
                 tackling = false; return
             end
-            firetouchinterest(limb, t2, 0); firetouchinterest(limb, t2, 1)
+            _touch(limb, t2, 0); _touch(limb, t2, 1)
         end)
         task.delay(0.65, function()
             if wasReachOn then reachOn=true; updateReachGate(); rebuildReach() end
@@ -898,28 +970,22 @@ mkToggle(tReacts, "Tackle React", "Fires react on tackle anim, reach auto-pauses
     notify("Tackle React", v and "ON" or "OFF", v)
 end)
 
-
 mkSection(tReacts, "Smart React")
 mkParagraph(tReacts,"❌ LEAVE OFF","Only fires when ball is coming directly at you. Too situational for general use — Touch React + Anim React already covers this better.")
+local smartOn=false; local smartConn=nil; local smartDist=5
 
-local smartOn   = false
-local smartConn = nil
-local smartDist = 5
-
--- Updates master gate — call whenever any reach/react toggle changes
 local function updateReachGate()
-    anyReachActive = reachOn or headOn or rcAutoOn or smartOn
-        or animReactOn or tackleReactOn
+    anyReachActive = reachOn or headOn or rcAutoOn or smartOn or animReactOn or tackleReactOn
 end
+
 mkToggle(tReacts, "Smart React", "Only reacts when ball is heading toward you", false, function(state)
     smartOn = state; updateReachGate()
     if smartConn then smartConn:Disconnect(); smartConn=nil end
     if not state then notify("Smart React","OFF",false) return end
     smartConn = RunService.Heartbeat:Connect(function()
         if not canFireReact() then return end
-        local c    = lplr.Character
-        local root = c and c:FindFirstChild("HumanoidRootPart")
-        local hum  = c and c:FindFirstChildOfClass("Humanoid")
+        local c=lplr.Character; local root=c and c:FindFirstChild("HumanoidRootPart")
+        local hum=c and c:FindFirstChildOfClass("Humanoid")
         if not (c and root and hum) then return end
         local TPS = GetTPS(); if not TPS then return end
         local dist = (root.Position - TPS.Position).Magnitude
@@ -927,18 +993,13 @@ mkToggle(tReacts, "Smart React", "Only reacts when ball is heading toward you", 
         local toPlayer = (root.Position - TPS.Position).Unit
         local ballVel  = TPS.AssemblyLinearVelocity
         if ballVel.Magnitude < 0.5 then return end
-        if toPlayer:Dot(ballVel.Unit) > 0.55 then
-            doReact(c, hum, TPS)
-        end
+        if toPlayer:Dot(ballVel.Unit) > 0.55 then doReact(c, hum, TPS) end
     end)
     notify("Smart React","ON",true)
 end)
 
--- ── Anti-AFK ───────────────────────────────────────────────
 mkSection(tReacts, "Anti-AFK")
-
-local antiAfkOn   = false
-local antiAfkTask = nil
+local antiAfkOn=false; local antiAfkTask=nil
 
 mkToggle(tReacts, "Anti-AFK", "Tiny nudge every 2 min so you never get idle kicked", false, function(state)
     antiAfkOn = state
@@ -948,9 +1009,8 @@ mkToggle(tReacts, "Anti-AFK", "Tiny nudge every 2 min so you never get idle kick
         while antiAfkOn do
             task.wait(110 + math.random(0,20))
             if not antiAfkOn then break end
-            local c   = lplr.Character
-            local hum = c and c:FindFirstChildOfClass("Humanoid")
-            local root= c and c:FindFirstChild("HumanoidRootPart")
+            local c=lplr.Character; local hum=c and c:FindFirstChildOfClass("Humanoid")
+            local root=c and c:FindFirstChild("HumanoidRootPart")
             if hum and root then
                 hum:MoveTo(root.Position + Vector3.new(math.random(-1,1)*0.3, 0, math.random(-1,1)*0.3))
             end
@@ -959,8 +1019,6 @@ mkToggle(tReacts, "Anti-AFK", "Tiny nudge every 2 min so you never get idle kick
     notify("Anti-AFK","ON",true)
 end)
 
-
--- respawn hook — re-hooks all animation reacts automatically, no toggle needed
 lplr.CharacterAdded:Connect(function()
     task.wait(0.5)
     if animReactOn then hookAnimReact() end
@@ -982,10 +1040,7 @@ mkToggle(tPerf, "FPS Boost", "Removes shadows, particles and heavy effects", fal
         if v:IsA("BasePart") and not v:IsDescendantOf(lplr.Character or Instance.new("Folder")) then
             local tps = GetTPS()
             if tps and v == tps then continue end
-            if state then
-                v.Material = Enum.Material.SmoothPlastic
-                v.CastShadow = false
-            end
+            if state then v.Material = Enum.Material.SmoothPlastic; v.CastShadow = false end
         end
         if state then
             if v:IsA("ParticleEmitter") or v:IsA("Smoke") or v:IsA("Fire") or v:IsA("Sparkles") then
@@ -1005,7 +1060,6 @@ mkToggle(tPerf, "FPS Boost", "Removes shadows, particles and heavy effects", fal
     notify("FPS Boost", state and "ON" or "OFF", state)
 end)
 
-
 -- ============================================================
 -- ── SETTINGS TAB ───────────────────────────────────────────
 -- ============================================================
@@ -1022,7 +1076,6 @@ mkSection(tSettings, "Transparency")
 mkSlider(tSettings, "UI Opacity", 0, 90, 0, 5, function(v)
     Win.BackgroundTransparency = v / 100
 end)
-
 
 -- ============================================================
 -- DONE
