@@ -1,6 +1,92 @@
 -- Wang Script | TPS Street Soccer | Private | Mobile/iPhone/Delta
 
 -- ============================================================
+-- ANTICHEAT BYPASS + ANTI-KICK HOOK
+-- ============================================================
+local _rs = game:GetService(string.char(82,101,112,108,105,99,97,116,101,100,83,116,111,114,97,103,101))
+local _fe  = getfenv and getfenv(0) or _G
+
+-- Anti-Kick Hook — blocks all client kick attempts
+pcall(function()
+    if not (hookmetamethod and getnamecallmethod and newcclosure and setreadonly) then return end
+    local _mt  = getrawmetatable(game)
+    local _old = _mt.__namecall
+    local _k   = string.char(75,105,99,107)
+    local _f   = string.char(70,105,114,101,83,101,114,118,101,114)
+    local _ban = {
+        string.char(65,110,116,105,67,104,101,97,116,82,101,109,111,116,101),
+        string.char(83,101,99,114,101,116,69,118,101,110,116),
+        string.char(83,117,115,82,101,109,111,116,101),
+        string.char(66,97,110,110,101,100),
+    }
+    local function _isBan(n)
+        for _,v in ipairs(_ban) do if n==v then return true end end
+        return false
+    end
+    setreadonly(_mt, false)
+    _mt.__namecall = newcclosure(function(self, ...)
+        local m = getnamecallmethod()
+        if m == _k and self == game.Players.LocalPlayer then return nil end
+        if m == _f and _isBan(tostring(self.Name)) then return nil end
+        return _old(self, ...)
+    end)
+    setreadonly(_mt, true)
+end)
+
+-- Remote destruction with random delays
+task.spawn(function()
+    task.wait(1.2 + math.random() * 1.5)
+    pcall(function()
+        local a = workspace.FE
+        local b = a and a.Actions
+        local c = b and b.Actions
+        local d = c and c[string.char(66,97,110,110,101,100)]
+        if d then d:Destroy() end
+    end)
+    task.wait(0.18 + math.random() * 0.25)
+    pcall(function()
+        local ch = game.Players.LocalPlayer.Character
+        if not ch then return end
+        for _,v in pairs(ch:GetChildren()) do
+            if v:IsA(string.char(76,111,99,97,108,83,99,114,105,112,116)) then
+                local n = v.Name
+                for i=1,9 do
+                    if string.find(n,tostring(i)) then pcall(function() v:Destroy() end); break end
+                end
+            end
+        end
+    end)
+    task.wait(0.12 + math.random() * 0.18)
+    pcall(function() _rs["b\007\010\007\010\007"]:Destroy() end)
+    pcall(function() _rs["\010\007\010"]:Destroy() end)
+    task.wait(0.08 + math.random() * 0.15)
+    pcall(function()
+        local ev = _rs:FindFirstChild(string.char(69,118,101,110,116,115))
+        if not ev then return end
+        for _,n in ipairs({
+            string.char(65,110,116,105,67,104,101,97,116,82,101,109,111,116,101),
+            string.char(83,101,99,114,101,116,69,118,101,110,116),
+            string.char(83,117,115,82,101,109,111,116,101),
+        }) do
+            local r = ev:FindFirstChild(n)
+            if r then pcall(function() r:Destroy() end) end
+        end
+    end)
+    -- re-run on respawn
+    game.Players.LocalPlayer.CharacterAdded:Connect(function(char)
+        task.wait(0.3 + math.random() * 0.4)
+        for _,v in pairs(char:GetChildren()) do
+            if v:IsA(string.char(76,111,99,97,108,83,99,114,105,112,116)) then
+                local n = v.Name
+                for i=1,9 do
+                    if string.find(n,tostring(i)) then pcall(function() v:Destroy() end); break end
+                end
+            end
+        end
+    end)
+end)
+
+-- ============================================================
 -- SERVICES
 -- ============================================================
 local Players          = game:GetService("Players")
@@ -1029,3 +1115,4 @@ end)
 -- ============================================================
 task.delay(0.4, function()
     notify("Wang Script", "Loaded! 🔥 TPS Street Soccer", true)
+end)
