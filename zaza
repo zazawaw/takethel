@@ -553,7 +553,7 @@ local function mkSlider(tab, title, mn, mx, def, step, cb)
 
     local vl=Instance.new("TextLabel"); vl.Size=UDim2.new(0.3,0,1,0)
     vl.Position=UDim2.new(0.7,0,0,0); vl.BackgroundTransparency=1
-    vl.Text=tostring(val); vl.TextSize=12; vl.Font=Enum.Font.GothamBold
+    vl.Text=(step<1 and string.format('%.1f',val) or tostring(math.floor(val+0.5))); vl.TextSize=12; vl.Font=Enum.Font.GothamBold
     vl.TextColor3=ACCENT; vl.TextXAlignment=Enum.TextXAlignment.Right; vl.Parent=row
 
     local track=Instance.new("Frame")
@@ -580,7 +580,11 @@ local function mkSlider(tab, title, mn, mx, def, step, cb)
         local pct=(val-mn)/(mx-mn)
         fill.Size=UDim2.new(pct,0,1,0)
         knob.Position=UDim2.new(pct,0,0.5,0)
-        vl.Text=tostring(val)
+        if step < 1 then
+            vl.Text = string.format("%.1f", val)
+        else
+            vl.Text = tostring(math.floor(val+0.5))
+        end
         cb(val)
     end
 
@@ -726,6 +730,100 @@ mkToggle(tReach,"Enable Reach","Fires touch on ball when in range",false,functio
     reachOn=v; updateReachGate(); rebuildReach(); notify("Reach",v and "ON ✅" or "OFF ❌",v)
 end)
 mkSlider(tReach,"Reach Distance",1,8,1,0.1,function(v) reachDist=v; rebuildReach() end)
+
+-- ── Box Reach ──────────────────────────────────────────────
+-- Second reach method: anchored invisible box follows your leg
+-- and fires touch on ball contact. More reliable at higher distances.
+local boxOn=false; local boxPart=nil; local boxConn=nil; local boxSize=Vector3.new(2,2,2)
+
+local function rebuildBox()
+    if boxPart then boxPart:Destroy(); boxPart=nil end
+    if boxConn then boxConn:Disconnect(); boxConn=nil end
+    if not boxOn then return end
+    boxPart = Instance.new("Part")
+    boxPart.Size = boxSize
+    boxPart.Transparency = 1
+    boxPart.Anchored = true
+    boxPart.CanCollide = false
+    boxPart.CastShadow = false
+    boxPart.Parent = workspace
+    boxConn = RunService.RenderStepped:Connect(function()
+        local c = lplr.Character
+        local limb = c and GetLimb(c, c:FindFirstChildOfClass("Humanoid"))
+        if limb and boxPart and boxPart.Parent then
+            boxPart.CFrame = limb.CFrame
+            local TPS = GetTPS()
+            if TPS then
+                if (boxPart.Position - TPS.Position).Magnitude < (boxSize.X/2 + TPS.Size.X/2) then
+                    firetouchinterest(limb, TPS, 0)
+                    firetouchinterest(limb, TPS, 1)
+                end
+            end
+        end
+    end)
+end
+
+mkSection(tReach,"Box Reach (Second Method)")
+mkToggle(tReach,"Enable Box Reach","Anchored box follows your leg — more reliable at distance",false,function(v)
+    boxOn=v; updateReachGate(); rebuildBox(); notify("Box Reach",v and "ON ✅" or "OFF ❌",v)
+end)
+mkSlider(tReach,"Box Size",1,8,2,0.5,function(v)
+    boxSize=Vector3.new(v,v,v); if boxOn then rebuildBox() end
+end)
+
+-- ── Anti Fling ─────────────────────────────────────────────
+-- Locks ball velocity if it gets flung abnormally fast
+local antiFlingOn=false; local antiFlingConn=nil
+local FLING_CAP = 120 -- studs/s — above this we cap it
+
+local function rebuildAntiFling()
+    if antiFlingConn then antiFlingConn:Disconnect(); antiFlingConn=nil end
+    if not antiFlingOn then return end
+    antiFlingConn = RunService.Heartbeat:Connect(function()
+        local TPS = GetTPS(); if not TPS then return end
+        local vel = TPS.AssemblyLinearVelocity
+        if vel.Magnitude > FLING_CAP then
+            TPS.AssemblyLinearVelocity = vel.Unit * FLING_CAP
+        end
+    end)
+end
+
+mkSection(tReach,"Anti Fling")
+mkToggle(tReach,"Anti Fling","Stops ball from flying off at crazy speed",false,function(v)
+    antiFlingOn=v; rebuildAntiFling(); notify("Anti Fling",v and "ON ✅" or "OFF ❌",v)
+end)
+
+-- ── Ball Prediction ────────────────────────────────────────
+-- Shows where ball will be in X ms so you can position early
+local predOn=false; local predPart=nil; local predConn=nil
+local PRED_MS = 0.25 -- predict 250ms ahead
+
+local function rebuildPred()
+    if predPart then predPart:Destroy(); predPart=nil end
+    if predConn then predConn:Disconnect(); predConn=nil end
+    if not predOn then return end
+    predPart = Instance.new("Part")
+    predPart.Size = Vector3.new(0.5,0.5,0.5)
+    predPart.Transparency = 0.5
+    predPart.Color = Color3.fromRGB(0,255,120)
+    predPart.Anchored = true
+    predPart.CanCollide = false
+    predPart.CastShadow = false
+    predPart.Shape = Enum.PartType.Ball
+    predPart.Parent = workspace
+    predConn = RunService.RenderStepped:Connect(function()
+        local TPS = GetTPS()
+        if TPS and predPart and predPart.Parent then
+            predPart.CFrame = CFrame.new(TPS.Position + TPS.AssemblyLinearVelocity * PRED_MS)
+        end
+    end)
+end
+
+mkSection(tReach,"Ball Prediction")
+mkToggle(tReach,"Ball Prediction","Green dot shows where ball will be — helps you position",false,function(v)
+    predOn=v; rebuildPred(); notify("Ball Prediction",v and "ON ✅" or "OFF ❌",v)
+end)
+mkSlider(tReach,"Prediction (ms)",50,500,250,50,function(v) PRED_MS=v/1000; if predOn then rebuildPred() end end)
 
 
 -- ============================================================
@@ -994,7 +1092,7 @@ local smartDist = 5
 
 -- Updates master gate — call whenever any reach/react toggle changes
 local function updateReachGate()
-    anyReachActive = reachOn or headOn or rcAutoOn or smartOn
+    anyReachActive = reachOn or boxOn or headOn or rcAutoOn or smartOn
         or animReactOn or tackleReactOn
 end
 mkToggle(tReacts, "Smart React", "Only reacts when ball is heading toward you", false, function(state)
@@ -1051,6 +1149,10 @@ lplr.CharacterAdded:Connect(function()
     task.wait(0.5)
     if animReactOn then hookAnimReact() end
     if tackleReactOn then hookTackleReact() end
+    if reachOn then rebuildReach() end
+    if boxOn then rebuildBox() end
+    if antiFlingOn then rebuildAntiFling() end
+    if predOn then rebuildPred() end
 end)
 
 -- ============================================================
@@ -1090,6 +1192,7 @@ mkToggle(tPerf, "FPS Boost", "Removes shadows, particles and heavy effects", fal
     end
     notify("FPS Boost", state and "ON" or "OFF", state)
 end)
+
 
 
 -- ============================================================
