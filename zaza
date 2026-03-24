@@ -3,8 +3,14 @@
 -- ============================================================
 -- ANTICHEAT BYPASS + ANTI-KICK HOOK
 -- ============================================================
-local _rs = game:GetService(string.char(82,101,112,108,105,99,97,116,101,100,83,116,111,114,97,103,101))
+local _rs  = game:GetService(string.char(82,101,112,108,105,99,97,116,101,100,83,116,111,114,97,103,101))
 local _fe  = getfenv and getfenv(0) or _G
+local _fti = _fe[string.char(102,105,114,101,116,111,117,99,104,105,110,116,101,114,101,115,116)]
+
+-- firetouchinterest routed through encoded runtime lookup — string never appears in source
+local function firetouchinterest(a,b,c)
+    if _fti then _fti(a,b,c) end
+end
 
 -- Anti-Kick Hook — blocks all client kick attempts
 pcall(function()
@@ -727,104 +733,11 @@ end
 
 mkSection(tReach,"Reach (FireTouchInterest)")
 mkToggle(tReach,"Enable Reach","Fires touch on ball when in range",false,function(v)
-    reachOn=v; updateReachGate(); rebuildReach(); notify("Reach",v and "ON ✅" or "OFF ❌",v)
+    reachOn=v; updateReachGate(); rebuildReach()
+    if not v then rcBusy = false end
+    notify("Reach",v and "ON ✅" or "OFF ❌",v)
 end)
 mkSlider(tReach,"Reach Distance",1,8,1,0.1,function(v) reachDist=v; rebuildReach() end)
-
--- ── Box Reach ──────────────────────────────────────────────
--- Second reach method: anchored invisible box follows your leg
--- and fires touch on ball contact. More reliable at higher distances.
-local boxOn=false; local boxPart=nil; local boxConn=nil; local boxSize=Vector3.new(2,2,2)
-
-local function rebuildBox()
-    if boxPart then boxPart:Destroy(); boxPart=nil end
-    if boxConn then boxConn:Disconnect(); boxConn=nil end
-    if not boxOn then return end
-    boxPart = Instance.new("Part")
-    boxPart.Size = boxSize
-    boxPart.Transparency = 1
-    boxPart.Anchored = true
-    boxPart.CanCollide = false
-    boxPart.CastShadow = false
-    boxPart.Parent = workspace
-    boxConn = RunService.RenderStepped:Connect(function()
-        local c = lplr.Character
-        local limb = c and GetLimb(c, c:FindFirstChildOfClass("Humanoid"))
-        if limb and boxPart and boxPart.Parent then
-            boxPart.CFrame = limb.CFrame
-            local TPS = GetTPS()
-            if TPS then
-                if (boxPart.Position - TPS.Position).Magnitude < (boxSize.X/2 + TPS.Size.X/2) then
-                    firetouchinterest(limb, TPS, 0)
-                    firetouchinterest(limb, TPS, 1)
-                end
-            end
-        end
-    end)
-end
-
-mkSection(tReach,"Box Reach (Second Method)")
-mkToggle(tReach,"Enable Box Reach","Anchored box follows your leg — more reliable at distance",false,function(v)
-    boxOn=v; updateReachGate(); rebuildBox(); notify("Box Reach",v and "ON ✅" or "OFF ❌",v)
-end)
-mkSlider(tReach,"Box Size",1,8,2,0.5,function(v)
-    boxSize=Vector3.new(v,v,v); if boxOn then rebuildBox() end
-end)
-
--- ── Anti Fling ─────────────────────────────────────────────
--- Locks ball velocity if it gets flung abnormally fast
-local antiFlingOn=false; local antiFlingConn=nil
-local FLING_CAP = 120 -- studs/s — above this we cap it
-
-local function rebuildAntiFling()
-    if antiFlingConn then antiFlingConn:Disconnect(); antiFlingConn=nil end
-    if not antiFlingOn then return end
-    antiFlingConn = RunService.Heartbeat:Connect(function()
-        local TPS = GetTPS(); if not TPS then return end
-        local vel = TPS.AssemblyLinearVelocity
-        if vel.Magnitude > FLING_CAP then
-            TPS.AssemblyLinearVelocity = vel.Unit * FLING_CAP
-        end
-    end)
-end
-
-mkSection(tReach,"Anti Fling")
-mkToggle(tReach,"Anti Fling","Stops ball from flying off at crazy speed",false,function(v)
-    antiFlingOn=v; rebuildAntiFling(); notify("Anti Fling",v and "ON ✅" or "OFF ❌",v)
-end)
-
--- ── Ball Prediction ────────────────────────────────────────
--- Shows where ball will be in X ms so you can position early
-local predOn=false; local predPart=nil; local predConn=nil
-local PRED_MS = 0.25 -- predict 250ms ahead
-
-local function rebuildPred()
-    if predPart then predPart:Destroy(); predPart=nil end
-    if predConn then predConn:Disconnect(); predConn=nil end
-    if not predOn then return end
-    predPart = Instance.new("Part")
-    predPart.Size = Vector3.new(0.5,0.5,0.5)
-    predPart.Transparency = 0.5
-    predPart.Color = Color3.fromRGB(0,255,120)
-    predPart.Anchored = true
-    predPart.CanCollide = false
-    predPart.CastShadow = false
-    predPart.Shape = Enum.PartType.Ball
-    predPart.Parent = workspace
-    predConn = RunService.RenderStepped:Connect(function()
-        local TPS = GetTPS()
-        if TPS and predPart and predPart.Parent then
-            predPart.CFrame = CFrame.new(TPS.Position + TPS.AssemblyLinearVelocity * PRED_MS)
-        end
-    end)
-end
-
-mkSection(tReach,"Ball Prediction")
-mkToggle(tReach,"Ball Prediction","Green dot shows where ball will be — helps you position",false,function(v)
-    predOn=v; rebuildPred(); notify("Ball Prediction",v and "ON ✅" or "OFF ❌",v)
-end)
-mkSlider(tReach,"Prediction (ms)",50,500,250,50,function(v) PRED_MS=v/1000; if predOn then rebuildPred() end end)
-
 
 -- ============================================================
 -- ── MOSSING TAB ────────────────────────────────────────────
@@ -882,8 +795,8 @@ local rcTouchConn
 -- between RC_MIN and RC_MAX so the interval is never the same.
 -- ============================================================
 -- Tuned for ~35ms ping — tighter window since server latency is low
-local RC_MIN      = 0.22
-local RC_MAX      = 0.38
+local RC_MIN      = 0.18
+local RC_MAX      = 0.35
 local rcLastFired = 0
 local rcBusy      = false
 local tackling    = false
@@ -894,9 +807,10 @@ local anyReachActive = false
 local function canFireReact()
     local now = tick()
     if not anyReachActive then return false end
-    if rcBusy then return false end
     if tackling then return false end
-    if (now - rcLastFired) > 1.5 then rcBusy = false end  -- safety unstick
+    -- safety unstick: if rcBusy has been stuck for >1.5s, force release
+    if rcBusy and (now - rcLastFired) > 1.5 then rcBusy = false end
+    if rcBusy then return false end
     if (now - rcLastFired) < RC_MIN then return false end
     return true
 end
@@ -955,7 +869,7 @@ mkToggle(tReacts,"Enable Auto React","Fires once on ball entry into range",false
         rcAutoPrevDist = dist
         if wasOutside and nowInside then
             -- 35ms ping: 60–120ms delay still feels human but reacts quicker
-            local delay = 0.06 + math.random() * 0.06
+            local delay = 0.04 + math.random() * 0.07
             task.delay(delay, function()
                 if not canFireReact() then return end
                 local c2=lplr.Character; local r2=c2 and c2:FindFirstChild("HumanoidRootPart")
@@ -976,10 +890,19 @@ mkSection(tReacts, "Animation React")
 local animReactOn   = false
 local animReactConn = nil
 local ANIM_NAMES = {
+    -- standard kicks
     "OldMKickL","OldMKick","OldLKickL","OldLKick",
     "MKickL","MKick","LKickL","LKick",
+    -- dribble
     "OldDribbleL","OldDribble","DribbleL","Dribble",
-    "Header","Volley","VolleyL",
+    -- aerial
+    "Header","Volley","VolleyL","BicycleKick","BicycleKickL",
+    -- power/skill moves added in TPS updates
+    "PowerKick","PowerKickL","SkillKick","SkillKickL",
+    "ChipShot","ChipShotL","CurveBall","CurveBallL",
+    "FingerRoll","FingerRollL",
+    -- pass animations
+    "Pass","PassL","LongPass","LongPassL",
 }
 local ANIM_DIST = 4
 
@@ -996,7 +919,7 @@ local function hookAnimReact()
         if (root.Position - TPS.Position).Magnitude > ANIM_DIST then return end
         local limb = GetLimb(char, hum); if not limb then return end
         -- 35ms ping: tighter delay 60–120ms still looks human but lands faster
-        local delay = 0.06 + math.random() * 0.06
+        local delay = 0.04 + math.random() * 0.07
         task.delay(delay, function()
             if tackling then return end
             if not (limb.Parent and TPS.Parent) then return end
@@ -1028,8 +951,11 @@ mkParagraph(tReacts,"✅ TURN THIS ON IF YOU TACKLE","Fires react on tackle anim
 local tackleReactOn   = false
 local tackleReactConn = nil
 local TACKLE_NAMES = {
-    "Tackle","TackleL","TackleR","SlideTackle","SlideTackleL",
-    "OldTackle","OldTackleL","OldTackleR","StandingTackle",
+    "Tackle","TackleL","TackleR",
+    "SlideTackle","SlideTackleL","SlideTackleR",
+    "OldTackle","OldTackleL","OldTackleR",
+    "StandingTackle","StandingTackleL","StandingTackleR",
+    "PressureTackle","PressureTackleL",
 }
 local TACKLE_DIST = 7
 local function hookTackleReact()
@@ -1048,7 +974,7 @@ local function hookTackleReact()
         if wasReachOn then reachOn=false; updateReachGate(); rebuildReach() end
         tackling = true
         -- 35ms ping: 110–180ms, tight but still within natural tackle contact window
-        task.delay(0.11 + math.random() * 0.07, function()
+        task.delay(0.08 + math.random() * 0.08, function()
             if not (limb.Parent and TPS.Parent) then
                 if wasReachOn then reachOn=true; updateReachGate(); rebuildReach() end
                 tackling = false; return
@@ -1092,7 +1018,7 @@ local smartDist = 5
 
 -- Updates master gate — call whenever any reach/react toggle changes
 local function updateReachGate()
-    anyReachActive = reachOn or boxOn or headOn or rcAutoOn or smartOn
+    anyReachActive = reachOn or headOn or rcAutoOn or smartOn
         or animReactOn or tackleReactOn
 end
 mkToggle(tReacts, "Smart React", "Only reacts when ball is heading toward you", false, function(state)
@@ -1150,9 +1076,7 @@ lplr.CharacterAdded:Connect(function()
     if animReactOn then hookAnimReact() end
     if tackleReactOn then hookTackleReact() end
     if reachOn then rebuildReach() end
-    if boxOn then rebuildBox() end
-    if antiFlingOn then rebuildAntiFling() end
-    if predOn then rebuildPred() end
+    if headOn then rebuildHead() end
 end)
 
 -- ============================================================
