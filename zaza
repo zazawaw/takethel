@@ -715,6 +715,20 @@ openTab(tReach)
 -- ============================================================
 local reachOn=false; local reachDist=1; local reachConn
 
+-- Forward declarations for all toggle states (used by updateReachGate)
+local headOn        = false
+local rcAutoOn      = false
+local smartOn       = false
+local animReactOn   = false
+local tackleReactOn = false
+
+-- MASTER GATE — defined here so ALL toggles below can call it
+local anyReachActive = false
+local function updateReachGate()
+    anyReachActive = reachOn or headOn or rcAutoOn or smartOn
+        or animReactOn or tackleReactOn or touchReactOn
+end
+
 local function rebuildReach()
     if reachConn then reachConn:Disconnect(); reachConn=nil end
     if not reachOn then return end
@@ -733,8 +747,13 @@ end
 
 mkSection(tReach,"Reach (FireTouchInterest)")
 mkToggle(tReach,"Enable Reach","Fires touch on ball when in range",false,function(v)
-    reachOn=v; updateReachGate(); rebuildReach()
-    if not v then rcBusy = false end
+    reachOn=v
+    if not v then
+        if reachConn then reachConn:Disconnect(); reachConn=nil end
+        rcBusy=false
+    end
+    updateReachGate()
+    rebuildReach()
     notify("Reach",v and "ON ✅" or "OFF ❌",v)
 end)
 mkSlider(tReach,"Reach Distance",1,8,1,0.1,function(v) reachDist=v; rebuildReach() end)
@@ -742,7 +761,8 @@ mkSlider(tReach,"Reach Distance",1,8,1,0.1,function(v) reachDist=v; rebuildReach
 -- ============================================================
 -- ── MOSSING TAB ────────────────────────────────────────────
 -- ============================================================
-local headOn=false; local headSize=Vector3.new(1,1.5,1)
+-- headOn already declared above as forward decl
+local headSize=Vector3.new(1,1.5,1)
 local headTrans=1; local headPart; local headConn
 
 local function rebuildHead()
@@ -769,7 +789,16 @@ local function rebuildHead()
 end
 
 mkSection(tMoss,"Head Reach (Mossing)")
-mkToggle(tMoss,"Enable Head Reach",nil,false,function(v) headOn=v; updateReachGate(); rebuildHead(); notify("Head Reach",v and "ON" or "OFF",v) end)
+mkToggle(tMoss,"Enable Head Reach",nil,false,function(v)
+    headOn=v
+    if not v then
+        if headConn then headConn:Disconnect(); headConn=nil end
+        if headPart then headPart:Destroy(); headPart=nil end
+    end
+    updateReachGate()
+    rebuildHead()
+    notify("Head Reach",v and "ON" or "OFF",v)
+end)
 mkToggle(tMoss,"Appear Normal (invisible box)",nil,false,function(v)
     headTrans=v and 1 or 0.5; if headPart then headPart.Transparency=headTrans end
 end)
@@ -785,7 +814,8 @@ end
 -- ============================================================
 -- ── REACTS TAB ─────────────────────────────────────────────
 -- ============================================================
-local rcAutoConn; local rcAutoOn=false; local rcAutoDist=4
+-- rcAutoOn already declared above as forward decl
+local rcAutoConn; rcAutoOn=false; local rcAutoDist=4
 local rcAutoPrevDist = math.huge
 local rcTouchConn
 
@@ -800,9 +830,6 @@ local RC_MAX      = 0.35
 local rcLastFired = 0
 local rcBusy      = false
 local tackling    = false
-
--- MASTER GATE: nothing fires unless at least one react is on
-local anyReachActive = false
 
 local function canFireReact()
     local now = tick()
@@ -832,9 +859,11 @@ end
 -- your character. Looks identical to a normal player on server.
 mkSection(tReacts,"Touch React")
 mkParagraph(tReacts,"✅ TURN THIS ON","Best react. Only fires on real ball contact — server sees it as a completely normal touch. Always have this on.")
+local touchReactOn = false
 mkToggle(tReacts,"Enable Touch React","Fires on real ball contact",false,function(state)
+    touchReactOn = state
     if rcTouchConn then rcTouchConn:Disconnect(); rcTouchConn=nil end
-    if not state then notify("Touch React","OFF",false) return end
+    if not state then updateReachGate(); notify("Touch React","OFF",false) return end
     local TPS=GetTPS(); if not TPS then notify("Reacts","Ball not found",false) return end
     rcTouchConn=TPS.Touched:Connect(function(hit)
         local c=lplr.Character; if not c then return end
@@ -845,6 +874,7 @@ mkToggle(tReacts,"Enable Touch React","Fires on real ball contact",false,functio
         if (root.Position - t.Position).Magnitude > 5.5 then return end
         doReact(c, hum, t)
     end)
+    updateReachGate()
     notify("Touch React","ON ✅",true)
 end)
 
@@ -857,7 +887,7 @@ mkToggle(tReacts,"Enable Auto React","Fires once on ball entry into range",false
     rcAutoOn=state; updateReachGate()
     if rcAutoConn then rcAutoConn:Disconnect(); rcAutoConn=nil end
     rcAutoPrevDist = math.huge
-    if not state then notify("Auto React","OFF",false) return end
+    if not state then rcBusy=false; notify("Auto React","OFF",false) return end
     rcAutoConn=RunService.Heartbeat:Connect(function()
         local c=lplr.Character; local root=c and c:FindFirstChild("HumanoidRootPart")
         local hum=c and c:FindFirstChildOfClass("Humanoid")
@@ -887,7 +917,8 @@ end)
 -- ── Animation React ────────────────────────────────────────
 mkSection(tReacts, "Animation React")
 
-local animReactOn   = false
+-- animReactOn already declared above as forward decl
+animReactOn   = false
 local animReactConn = nil
 local ANIM_NAMES = {
     -- standard kicks
@@ -940,6 +971,7 @@ mkToggle(tReacts, "Animation React", "Fires on kick/dribble anim near ball", fal
     animReactOn = v; updateReachGate()
     if v then hookAnimReact() else
         if animReactConn then animReactConn:Disconnect(); animReactConn=nil end
+        rcBusy=false
     end
     notify("Anim React", v and "ON ✅" or "OFF", v)
 end)
@@ -948,7 +980,8 @@ end)
 mkSection(tReacts, "Tackle React")
 mkParagraph(tReacts,"✅ TURN THIS ON IF YOU TACKLE","Fires react on tackle animations with a natural delay. Pauses reach so you don't double-fire.")
 
-local tackleReactOn   = false
+-- tackleReactOn already declared above as forward decl
+tackleReactOn   = false
 local tackleReactConn = nil
 local TACKLE_NAMES = {
     "Tackle","TackleL","TackleR",
@@ -1004,6 +1037,7 @@ mkToggle(tReacts, "Tackle React", "Fires react on tackle anim, reach auto-pauses
     tackleReactOn = v; updateReachGate()
     if v then hookTackleReact() else
         if tackleReactConn then tackleReactConn:Disconnect(); tackleReactConn=nil end
+        tackling=false; rcBusy=false
     end
     notify("Tackle React", v and "ON" or "OFF", v)
 end)
@@ -1012,19 +1046,15 @@ end)
 mkSection(tReacts, "Smart React")
 mkParagraph(tReacts,"❌ LEAVE OFF","Only fires when ball is coming directly at you. Too situational for general use — Touch React + Anim React already covers this better.")
 
-local smartOn   = false
+-- smartOn already declared above; just reset here
+smartOn = false
 local smartConn = nil
 local smartDist = 5
 
--- Updates master gate — call whenever any reach/react toggle changes
-local function updateReachGate()
-    anyReachActive = reachOn or headOn or rcAutoOn or smartOn
-        or animReactOn or tackleReactOn
-end
 mkToggle(tReacts, "Smart React", "Only reacts when ball is heading toward you", false, function(state)
     smartOn = state; updateReachGate()
     if smartConn then smartConn:Disconnect(); smartConn=nil end
-    if not state then notify("Smart React","OFF",false) return end
+    if not state then rcBusy=false; notify("Smart React","OFF",false) return end
     smartConn = RunService.Heartbeat:Connect(function()
         if not canFireReact() then return end
         local c    = lplr.Character
