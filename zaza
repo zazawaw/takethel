@@ -50,14 +50,6 @@ local function mkCorner(p, r)
     c.Parent = p
 end
 
-local function mkStroke(p, col, thick)
-    local s = Instance.new("UIStroke")
-    s.Color = col or ACCENT
-    s.Thickness = thick or 1
-    s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-    s.Parent = p
-end
-
 local function mkPad(p, l,r,t,b)
     local pad = Instance.new("UIPadding")
     pad.PaddingLeft   = UDim.new(0, l or 0)
@@ -672,12 +664,11 @@ end)
 -- ── MOSSING TAB
 -- ============================================================
 -- Dialga-style multi-box moss:
--- Instead of one big box, uses 3 overlapping parts:
+-- Uses 4 overlapping invisible parts:
 --   [1] Main box — centered on head
 --   [2] Forward box — offset in front, catches incoming balls
 --   [3] Wide box — thin but wide, catches crosses and aerials
--- All invisible. Together they cover far more area than a single box
--- without any single part being suspiciously large.
+--   [4] Low box — below head, catches neck-height crosses
 
 local mossBoxes   = {}   -- holds all active parts
 local mossConn    = nil
@@ -687,9 +678,10 @@ local mossVisible = false -- debug visibility
 -- Box layout relative to head center (offset, size multipliers)
 local MOSS_LAYOUT = {
     -- {offsetCF, sizeMultX, sizeMultY, sizeMultZ}
-    { CFrame.new(0, 0, 0),        1.0, 1.0, 1.0 },   -- main center box
-    { CFrame.new(0, 0, -0.6),     0.8, 0.7, 0.8 },   -- forward (ball coming at face)
-    { CFrame.new(0, 0.2, 0),      1.4, 0.5, 1.4 },   -- wide flat top (crosses/aerials)
+    { CFrame.new(0,  0.0,  0),    1.0, 1.0, 1.0 },   -- main center box
+    { CFrame.new(0,  0.0, -0.6),  0.8, 0.7, 0.8 },   -- forward (ball coming at face)
+    { CFrame.new(0,  0.2,  0),    1.4, 0.5, 1.4 },   -- wide flat top (crosses/aerials)
+    { CFrame.new(0, -0.5,  0),    1.1, 0.6, 1.1 },   -- low box (neck height crosses)
 }
 
 local function mossBaseSize()
@@ -752,7 +744,7 @@ local function rebuildHead()
 end
 
 mkSection(tMoss, "Dialga Moss (Multi-Box)")
-mkParagraph(tMoss, "How it works", "3 invisible boxes around your head. Main box + forward box (catches balls coming at your face) + wide flat box (catches crosses & aerials). Way better than single box.")
+mkParagraph(tMoss, "How it works", "4 invisible boxes around your head. Main box + forward box (catches balls coming at your face) + wide flat box (crosses & aerials) + low box (neck height). Full coverage.")
 mkToggle(tMoss, "Enable Moss", nil, false, function(v)
     headOn = v
     if not v then destroyMoss() end
@@ -799,11 +791,14 @@ local rcTouchConn
 -- ── Touch React ────────────────────────────────────────────
 mkSection(tReacts,"Touch React")
 mkParagraph(tReacts,"✅ TURN THIS ON","Best react. Only fires on real ball contact — server sees it as a completely normal touch. Always have this on.")
-mkToggle(tReacts,"Enable Touch React","Fires on real ball contact",false,function(state)
-    touchReactOn = state
+
+local function hookTouchReact()
     if rcTouchConn then rcTouchConn:Disconnect(); rcTouchConn=nil end
-    if not state then updateReachGate(); notify("Touch React","OFF",false) return end
-    local TPS=GetTPS(); if not TPS then notify("Reacts","Ball not found",false) return end
+    if not touchReactOn then return end
+    local TPS=GetTPS(); if not TPS then
+        -- ball not found yet, retry shortly
+        task.delay(1, hookTouchReact); return
+    end
     rcTouchConn=TPS.Touched:Connect(function(hit)
         local c=lplr.Character; if not c then return end
         if not hit:IsDescendantOf(c) then return end
@@ -813,6 +808,20 @@ mkToggle(tReacts,"Enable Touch React","Fires on real ball contact",false,functio
         if (root.Position - t.Position).Magnitude > 5.5 then return end
         doReact(c, hum, t)
     end)
+    -- if ball gets replaced mid-game re-hook automatically
+    TPS.AncestryChanged:Connect(function()
+        if not touchReactOn then return end
+        task.delay(0.5, hookTouchReact)
+    end)
+end
+
+mkToggle(tReacts,"Enable Touch React","Fires on real ball contact",false,function(state)
+    touchReactOn = state
+    if not state then
+        if rcTouchConn then rcTouchConn:Disconnect(); rcTouchConn=nil end
+        updateReachGate(); notify("Touch React","OFF",false); return
+    end
+    hookTouchReact()
     updateReachGate()
     notify("Touch React","ON ✅",true)
 end)
@@ -832,7 +841,7 @@ mkToggle(tReacts,"Enable Auto React","Fires once on ball entry into range",false
         local TPS=GetTPS(); if not TPS then return end
         local dist=(root.Position-TPS.Position).Magnitude
         local wasOutside=rcAutoPrevDist>rcAutoDist
-        local nowInside=dist<=rcAutoDist
+        local nowInside=dist<=rcAutoDist*1.15  -- 15% buffer catches fast sprinting
         rcAutoPrevDist=dist
         if wasOutside and nowInside then
             local delay=0.04+math.random()*0.07
@@ -842,7 +851,8 @@ mkToggle(tReacts,"Enable Auto React","Fires once on ball entry into range",false
                 local h2=c2 and c2:FindFirstChildOfClass("Humanoid")
                 if not(c2 and r2 and h2) then return end
                 local t2=GetTPS(); if not t2 then return end
-                if (r2.Position-t2.Position).Magnitude>rcAutoDist then return end
+                -- use slightly wider check on fire to match buffer
+                if (r2.Position-t2.Position).Magnitude>rcAutoDist*1.15 then return end
                 doReact(c2,h2,t2)
             end)
         end
@@ -993,38 +1003,6 @@ mkToggle(tReacts,"Smart React","Only reacts when ball is heading toward you",fal
     notify("Smart React","ON",true)
 end)
 
--- ── Ball Collision ─────────────────────────────────────────
-mkSection(tReacts,"Ball Collision")
-local rcColConn; local rcFollower
-mkToggle(tReacts,"Ball Collision","Synced invisible collider on ball",false,function(state)
-    if rcColConn then rcColConn:Disconnect(); rcColConn=nil end
-    if rcFollower then rcFollower:Destroy(); rcFollower=nil end
-    if not state then notify("Ball Collision","OFF",false) return end
-    local TPS=GetTPS(); if not TPS then notify("Reacts","Ball not found",false) return end
-    rcFollower=Instance.new("Part"); rcFollower.Shape=Enum.PartType.Ball
-    rcFollower.Anchored=true; rcFollower.CanCollide=true; rcFollower.Massless=true
-    rcFollower.Transparency=1; rcFollower.Parent=workspace
-    rcColConn=RunService.Heartbeat:Connect(function()
-        local t=GetTPS()
-        if t and rcFollower and rcFollower.Parent then
-            rcFollower.Size=t.Size*1.05; rcFollower.CFrame=t.CFrame
-        end
-    end)
-    notify("Ball Collision","ON",true)
-end)
-
--- ── Remove Ball Constraints ────────────────────────────────
-mkSection(tReacts,"Ball Delay")
-mkButton(tReacts,"Remove Ball Constraints",function()
-    local TPS=GetTPS(); if not TPS then notify("Reacts","Ball not found",false) return end
-    for _,v in pairs(TPS:GetChildren()) do
-        if v:IsA("Attachment") or v:IsA("BodyVelocity") or v:IsA("BodyForce") or v:IsA("BodyGyro") then
-            pcall(function() v:Destroy() end)
-        end
-    end
-    notify("Ball Delay","Constraints removed",true)
-end)
-
 -- ── Anti-AFK ───────────────────────────────────────────────
 mkSection(tReacts,"Anti-AFK")
 local antiAfkOn=false
@@ -1057,6 +1035,7 @@ lplr.CharacterAdded:Connect(function()
     if tackleReactOn then hookTackleReact() end
     if reachOn then rebuildReach() end
     if headOn then destroyMoss(); rebuildHead() end
+    if touchReactOn then hookTouchReact() end
 end)
 
 -- ============================================================
