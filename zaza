@@ -567,16 +567,45 @@ local function canFireReact()
     return true
 end
 
+-- React queue — if a react is blocked by cooldown, queue it
+-- so it fires as soon as the cooldown clears. Gives near 100% react rate.
+local rcQueue = false
+local function queueReact(c, hum, TPS)
+    if canFireReact() then
+        -- fire immediately
+        local limb = GetLimb(c, hum); if not limb then return end
+        rcBusy = true; rcLastFired = tick()
+        firetouchinterest(limb, TPS, 0); firetouchinterest(limb, TPS, 1)
+        local nw = RC_MIN + math.random() * (RC_MAX - RC_MIN)
+        task.delay(nw, function() rcBusy = false end)
+    elseif not rcQueue and anyReachActive and not tackling then
+        -- queue it — fire once cooldown clears
+        rcQueue = true
+        local queuedAt = tick()
+        task.delay(RC_MAX + 0.05, function()
+            rcQueue = false
+            if not anyReachActive or tackling then return end
+            -- drop if queued too long (ball probably moved away)
+            if tick() - queuedAt > 0.6 then return end
+            local t2 = GetTPS(); if not t2 then return end
+            local c2 = lplr.Character; local r2 = c2 and c2:FindFirstChild("HumanoidRootPart")
+            local h2 = c2 and c2:FindFirstChildOfClass("Humanoid")
+            if not (c2 and r2 and h2) then return end
+            -- use reachDist + small buffer as max distance for queued react
+            local maxDist = math.max(reachDist + 1.5, 5)
+            if (r2.Position - t2.Position).Magnitude > maxDist then return end
+            if not canFireReact() then return end
+            local limb = GetLimb(c2, h2); if not limb then return end
+            rcBusy = true; rcLastFired = tick()
+            firetouchinterest(limb, t2, 0); firetouchinterest(limb, t2, 1)
+            local nw = RC_MIN + math.random() * (RC_MAX - RC_MIN)
+            task.delay(nw, function() rcBusy = false end)
+        end)
+    end
+end
+
 local function doReact(c, hum, TPS)
-    if not canFireReact() then return end
-    local limb = GetLimb(c, hum)
-    if not limb then return end
-    rcBusy = true
-    rcLastFired = tick()
-    firetouchinterest(limb, TPS, 0)
-    firetouchinterest(limb, TPS, 1)
-    local nextWindow = RC_MIN + math.random() * (RC_MAX - RC_MIN)
-    task.delay(nextWindow, function() rcBusy = false end)
+    queueReact(c, hum, TPS)
 end
 
 -- ============================================================
@@ -893,11 +922,9 @@ local function hookAnimReact()
             if not(limb.Parent and TPS.Parent) then return end
             local t2=GetTPS(); if not t2 then return end
             if (root.Position-t2.Position).Magnitude>ANIM_DIST then return end
-            if not canFireReact() then return end
-            firetouchinterest(limb,t2,0); firetouchinterest(limb,t2,1)
-            rcBusy=true; rcLastFired=tick()
-            local nw=RC_MIN+math.random()*(RC_MAX-RC_MIN)
-            task.delay(nw,function() rcBusy=false end)
+            local c2=lplr.Character; local h2=c2 and c2:FindFirstChildOfClass("Humanoid")
+            if not(c2 and h2) then return end
+            doReact(c2, h2, t2)
         end)
     end)
 end
@@ -952,7 +979,8 @@ local function hookTackleReact()
                 if wasReachOn then reachOn=true; updateReachGate(); rebuildReach() end
                 tackling=false; return
             end
-            firetouchinterest(limb,t2,0); firetouchinterest(limb,t2,1)
+            local c2=lplr.Character; local h2=c2 and c2:FindFirstChildOfClass("Humanoid")
+            if c2 and h2 then doReact(c2, h2, t2) end
         end)
         task.delay(0.65,function()
             if wasReachOn then reachOn=true; updateReachGate(); rebuildReach() end
