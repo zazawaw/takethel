@@ -586,7 +586,7 @@ local function queueReact(c, hum, TPS)
             rcQueue = false
             if not anyReachActive or tackling then return end
             -- drop if queued too long (ball probably moved away)
-            if tick() - queuedAt > 0.6 then return end
+            if tick() - queuedAt > 0.3 then return end
             local t2 = GetTPS(); if not t2 then return end
             local c2 = lplr.Character; local r2 = c2 and c2:FindFirstChild("HumanoidRootPart")
             local h2 = c2 and c2:FindFirstChildOfClass("Humanoid")
@@ -821,14 +821,34 @@ local rcTouchConn
 mkSection(tReacts,"Touch React")
 mkParagraph(tReacts,"✅ TURN THIS ON","Best react. Only fires on real ball contact — server sees it as a completely normal touch. Always have this on.")
 
+-- shot suppression — blocks Touch React briefly after own kick/shot anim
+local rcShotSuppress = false
+local SHOT_ANIMS = {
+    "MKickL","MKick","LKickL","LKick",
+    "OldMKickL","OldMKick","OldLKickL","OldLKick",
+    "PowerKick","PowerKickL","ChipShot","ChipShotL",
+    "CurveBall","CurveBallL","FingerRoll","FingerRollL",
+}
+
 local function hookTouchReact()
     if rcTouchConn then rcTouchConn:Disconnect(); rcTouchConn=nil end
     if not touchReactOn then return end
     local TPS=GetTPS(); if not TPS then
-        -- ball not found yet, retry shortly
         task.delay(1, hookTouchReact); return
     end
+    -- hook shot suppression on current character
+    local char = lplr.Character
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    if hum then
+        hum.AnimationPlayed:Connect(function(track)
+            if table.find(SHOT_ANIMS, track.Name) then
+                rcShotSuppress = true
+                task.delay(0.35, function() rcShotSuppress = false end)
+            end
+        end)
+    end
     rcTouchConn=TPS.Touched:Connect(function(hit)
+        if rcShotSuppress then return end  -- own shot, skip
         local c=lplr.Character; if not c then return end
         if not hit:IsDescendantOf(c) then return end
         local hum=c:FindFirstChildOfClass("Humanoid"); if not hum then return end
@@ -837,7 +857,6 @@ local function hookTouchReact()
         if (root.Position - t.Position).Magnitude > 5.5 then return end
         doReact(c, hum, t)
     end)
-    -- if ball gets replaced mid-game re-hook automatically
     TPS.AncestryChanged:Connect(function()
         if not touchReactOn then return end
         task.delay(0.5, hookTouchReact)
@@ -870,7 +889,7 @@ mkToggle(tReacts,"Enable Auto React","Fires once on ball entry into range",false
         local TPS=GetTPS(); if not TPS then return end
         local dist=(root.Position-TPS.Position).Magnitude
         local wasOutside=rcAutoPrevDist>rcAutoDist
-        local nowInside=dist<=rcAutoDist*1.15  -- 15% buffer catches fast sprinting
+        local nowInside=dist<=rcAutoDist*1.05  -- tightened from 15% to 5% buffer
         rcAutoPrevDist=dist
         if wasOutside and nowInside then
             local delay=0.04+math.random()*0.07
@@ -881,7 +900,7 @@ mkToggle(tReacts,"Enable Auto React","Fires once on ball entry into range",false
                 if not(c2 and r2 and h2) then return end
                 local t2=GetTPS(); if not t2 then return end
                 -- use slightly wider check on fire to match buffer
-                if (r2.Position-t2.Position).Magnitude>rcAutoDist*1.15 then return end
+                if (r2.Position-t2.Position).Magnitude>rcAutoDist*1.05 then return end
                 doReact(c2,h2,t2)
             end)
         end
